@@ -447,7 +447,9 @@ export default function GestureController({
       {/* Hidden capturing video stream styled to ensure browser always processes frames */}
       <video
         id="webcam"
-        style={{ position: 'absolute', width: 0, height: 0, opacity: 0, pointerEvents: 'none' }}
+        width={320}
+        height={240}
+        style={{ position: 'fixed', width: '320px', height: '240px', opacity: 0.001, pointerEvents: 'none', top: '-1000px', left: '-1000px' }}
         autoPlay
         playsInline
         muted
