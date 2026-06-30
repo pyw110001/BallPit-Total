@@ -496,6 +496,63 @@ export default function GestureController({
         </div>
       </div>
 
+      {/* Floating gesture instructions card */}
+      <div
+        className="gesture-instructions-card animate-fade-in"
+        style={{
+          position: 'fixed',
+          top: '242px',
+          right: '20px',
+          width: '200px',
+          zIndex: 1000,
+          background: 'rgba(8, 9, 20, 0.65)',
+          border: '1px solid rgba(255, 255, 255, 0.1)',
+          borderRadius: '12px',
+          padding: '12px',
+          boxShadow: '0 8px 32px rgba(0, 0, 0, 0.3)',
+          backdropFilter: 'blur(12px)',
+          color: '#e2e8f0',
+          fontSize: '10px',
+          fontFamily: 'sans-serif',
+          lineHeight: '1.5',
+          pointerEvents: 'none',
+          display: active ? 'block' : 'none'
+        }}
+      >
+        <div style={{ 
+          fontWeight: 'bold', 
+          color: '#a5b4fc', 
+          marginBottom: '6px', 
+          fontSize: '11px',
+          borderBottom: '1px solid rgba(255, 255, 255, 0.1)',
+          paddingBottom: '4px',
+          letterSpacing: '0.5px'
+        }}>
+          {lang === 'zh' ? '手势操作指南' : 'Gesture Guide'}
+        </div>
+        <ul style={{ listStyleType: 'none', padding: 0, margin: 0 }}>
+          <li style={{ marginBottom: '6px' }}>
+            <span style={{ color: '#6366f1', fontWeight: 'bold' }}>👉 {lang === 'zh' ? '右手腕' : 'Right Wrist'}</span>: {lang === 'zh' ? '控制光标移动' : 'Move cursor'}
+          </li>
+          <li style={{ marginBottom: '6px' }}>
+            <span style={{ color: '#10b981', fontWeight: 'bold' }}>👌 右手捏合</span>: {lang === 'zh' ? '鼠标左键点击' : 'Mouse Click'}
+          </li>
+          <li style={{ marginBottom: '6px' }}>
+            <span style={{ color: '#a855f7', fontWeight: 'bold' }}>✋ {lang === 'zh' ? '左手上下' : 'Left Up/Down'}</span>: {lang === 'zh' ? '滚轮缩放视角' : 'Scroll to Zoom'}
+          </li>
+        </ul>
+        <div style={{ 
+          marginTop: '6px', 
+          fontSize: '8.5px', 
+          color: '#94a3b8', 
+          borderTop: '1px solid rgba(255, 255, 255, 0.05)',
+          paddingTop: '4px',
+          fontStyle: 'italic'
+        }}>
+          {lang === 'zh' ? '* 交互仅在演示场景内生效' : '* Cursor active inside simulations only'}
+        </div>
+      </div>
+
       {/* Custom Virtual Hand Cursor */}
       <div
         ref={virtualCursorDom}
