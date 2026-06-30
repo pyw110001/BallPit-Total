@@ -7,6 +7,14 @@ interface GestureControllerProps {
   lang?: 'zh' | 'en'
 }
 
+const dist3D = (p1: any, p2: any) => {
+  if (!p1 || !p2) return 0
+  const dx = p1.x - p2.x
+  const dy = p1.y - p2.y
+  const dz = (p1.z || 0) - (p2.z || 0)
+  return Math.sqrt(dx * dx + dy * dy + dz * dz)
+}
+
 export default function GestureController({
   active,
   enableInteraction = true,
@@ -313,40 +321,51 @@ export default function GestureController({
             )
           }
 
-          // Track RIGHT_INDEX (20) and RIGHT_THUMB (22) for right hand click pinch gesture (Exact Match to user request)
+          // Track RIGHT_INDEX (20), RIGHT_PINKY (18), and RIGHT_WRIST (16) for right hand fist click gesture
           const rightIndex = landmarks[20]
-          const rightThumb = landmarks[22]
+          const rightPinky = landmarks[18]
+          const leftShoulder = landmarks[11]
+          const rightShoulder = landmarks[12]
 
-          if (rightIndex && rightThumb && rightIndex.visibility > 0.25 && rightThumb.visibility > 0.25) {
-            const dx = rightIndex.x - rightThumb.x
-            const dy = rightIndex.y - rightThumb.y
-            const dist = Math.sqrt(dx * dx + dy * dy)
+          if (rightIndex && rightPinky && leftShoulder && rightShoulder &&
+              rightIndex.visibility > 0.3 && rightPinky.visibility > 0.3 &&
+              leftShoulder.visibility > 0.5 && rightShoulder.visibility > 0.5) {
+            
+            const shoulderDist = dist3D(leftShoulder, rightShoulder)
+            if (shoulderDist > 0.05) {
+              const wristToIndex = dist3D(rightWrist, rightIndex)
+              const wristToPinky = dist3D(rightWrist, rightPinky)
+              const avgHandDist = (wristToIndex + wristToPinky) / 2.0
+              const handRatio = avgHandDist / shoulderDist
 
-            // Pinch-click distance thresholds
-            if (dist < 0.04) { // Pinch
-              if (!isPinchedRef.current) {
-                isPinchedRef.current = true
-                triggerClick(cx, cy)
-                if (virtualCursorDom.current) {
-                  virtualCursorDom.current.classList.add('pinched')
+              // Fist (握拳) click threshold: hand ratio drops when fingers fold in
+              if (handRatio < 0.115) {
+                if (!isPinchedRef.current) {
+                  isPinchedRef.current = true
+                  triggerClick(cx, cy)
+                  if (virtualCursorDom.current) {
+                    virtualCursorDom.current.classList.add('pinched')
+                  }
+                }
+              } else if (handRatio > 0.145) {
+                if (isPinchedRef.current) {
+                  isPinchedRef.current = false
+                  if (virtualCursorDom.current) {
+                    virtualCursorDom.current.classList.remove('pinched')
+                  }
                 }
               }
-            } else if (dist > 0.06) { // Release
-              if (isPinchedRef.current) {
-                isPinchedRef.current = false
-                if (virtualCursorDom.current) {
-                  virtualCursorDom.current.classList.remove('pinched')
-                }
-              }
+
+              // Draw right hand fist indicator line on camera preview (mirror coordinates manually: 1.0 - x)
+              ctx.strokeStyle = isPinchedRef.current ? 'rgba(255, 64, 96, 0.8)' : 'rgba(32, 255, 160, 0.8)'
+              ctx.lineWidth = 3
+              ctx.beginPath()
+              ctx.moveTo((1.0 - rightWrist.x) * width, rightWrist.y * height)
+              ctx.lineTo((1.0 - rightIndex.x) * width, rightIndex.y * height)
+              ctx.moveTo((1.0 - rightWrist.x) * width, rightWrist.y * height)
+              ctx.lineTo((1.0 - rightPinky.x) * width, rightPinky.y * height)
+              ctx.stroke()
             }
-
-            // Draw right hand pinch indicator line on camera preview (mirror coordinates manually: 1.0 - x)
-            ctx.strokeStyle = isPinchedRef.current ? 'rgba(255, 64, 96, 0.8)' : 'rgba(32, 255, 160, 0.8)'
-            ctx.lineWidth = 3
-            ctx.beginPath()
-            ctx.moveTo((1.0 - rightIndex.x) * width, rightIndex.y * height)
-            ctx.lineTo((1.0 - rightThumb.x) * width, rightThumb.y * height)
-            ctx.stroke()
           }
         }
 
@@ -446,10 +465,10 @@ export default function GestureController({
     drawLine(landmarks[11], landmarks[13], 'rgba(168, 85, 247, 0.5)')
     drawLine(landmarks[13], landmarks[15], 'rgba(168, 85, 247, 0.8)', 3)
 
-    // Hand components (Corrected to track RIGHT hand index 20 & right thumb 22)
+    // Hand components (Fist tracking: wrist 16, index 20, pinky 18)
     drawPoint(landmarks[16], '#3b82f6', 6)  // Right Wrist (Blue)
     drawPoint(landmarks[20], '#10b981', 5)  // Right Index (Green)
-    drawPoint(landmarks[22], '#f59e0b', 5)  // Right Thumb (Orange)
+    drawPoint(landmarks[18], '#f59e0b', 5)  // Right Pinky (Orange)
 
     // Left wrist
     drawPoint(landmarks[15], '#a855f7', 6)  // Left Wrist (Purple)
@@ -535,7 +554,7 @@ export default function GestureController({
             <span style={{ color: '#6366f1', fontWeight: 'bold' }}>👉 {lang === 'zh' ? '右手腕' : 'Right Wrist'}</span>: {lang === 'zh' ? '控制光标移动' : 'Move cursor'}
           </li>
           <li style={{ marginBottom: '6px' }}>
-            <span style={{ color: '#10b981', fontWeight: 'bold' }}>👌 右手捏合</span>: {lang === 'zh' ? '鼠标左键点击' : 'Mouse Click'}
+            <span style={{ color: '#10b981', fontWeight: 'bold' }}>✊ 右手握拳</span>: {lang === 'zh' ? '鼠标左键点击' : 'Mouse Click'}
           </li>
           <li style={{ marginBottom: '6px' }}>
             <span style={{ color: '#a855f7', fontWeight: 'bold' }}>✋ {lang === 'zh' ? '左手上下' : 'Left Up/Down'}</span>: {lang === 'zh' ? '滚轮缩放视角' : 'Scroll to Zoom'}
