@@ -14,15 +14,15 @@ export default function GestureController({
   const [loaded, setLoaded] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [statusKey, setStatusKey] = useState<'initializing' | 'ready' | 'error' | 'disabled'>('initializing')
+  const [frameCount, setFrameCount] = useState(0)
   
-  const videoRef = useRef<HTMLVideoElement | null>(null)
-  const canvasRef = useRef<HTMLCanvasElement | null>(null)
   const poseRef = useRef<any>(null)
   const cameraRef = useRef<any>(null)
   
   // Tracking cursor coords (smoothed via LERP)
   const cursorRef = useRef({ x: window.innerWidth / 2, y: window.innerHeight / 2 })
   const virtualCursorDom = useRef<HTMLDivElement | null>(null)
+  const frameCountRef = useRef(0)
   
   // Click states
   const isPinchedRef = useRef(false)
@@ -97,9 +97,12 @@ export default function GestureController({
       } else {
         stopCamera()
         setStatusKey('disabled')
-        if (canvasRef.current) {
-          const ctx = canvasRef.current.getContext('2d')
-          ctx?.clearRect(0, 0, canvasRef.current.width, canvasRef.current.height)
+        setFrameCount(0)
+        frameCountRef.current = 0
+        const canvas = document.getElementById('camera-canvas') as HTMLCanvasElement
+        if (canvas) {
+          const ctx = canvas.getContext('2d')
+          ctx?.clearRect(0, 0, canvas.width, canvas.height)
         }
       }
     }
@@ -114,18 +117,24 @@ export default function GestureController({
       }
       cameraRef.current = null
     }
-    if (videoRef.current && videoRef.current.srcObject) {
-      const stream = videoRef.current.srcObject as MediaStream
+    const videoElement = document.getElementById('webcam') as HTMLVideoElement
+    if (videoElement && videoElement.srcObject) {
+      const stream = videoElement.srcObject as MediaStream
       stream.getTracks().forEach((track) => track.stop())
-      videoRef.current.srcObject = null
+      videoElement.srcObject = null
     }
   }
 
   const startCamera = async () => {
     if (cameraRef.current) return
 
-    const videoElement = videoRef.current
-    if (!videoElement) return
+    // Fetch video element directly by ID (avoiding React Ref timing race conditions)
+    const videoElement = document.getElementById('webcam') as HTMLVideoElement
+    if (!videoElement) {
+      // Retry slightly later if DOM element is not mounted yet
+      setTimeout(startCamera, 100)
+      return
+    }
 
     try {
       const CameraClass = (window as any).Camera
@@ -134,7 +143,7 @@ export default function GestureController({
         return
       }
 
-      // Initialize camera directly using MediaPipe's Camera helper (exact match to Particels1)
+      // Initialize camera directly using MediaPipe's Camera helper
       cameraRef.current = new CameraClass(videoElement, {
         onFrame: async () => {
           if (poseRef.current && active) {
@@ -182,15 +191,24 @@ export default function GestureController({
   }
 
   const onPoseResults = (results: any) => {
-    if (!active || !canvasRef.current) return
+    if (!active) return
 
-    const canvas = canvasRef.current
+    // Fetch canvas directly by ID dynamically to prevent react ref timing delay bugs
+    const canvas = document.getElementById('camera-canvas') as HTMLCanvasElement
+    if (!canvas) return
+
     const ctx = canvas.getContext('2d')
     if (!ctx) return
 
     const { width, height } = canvas
 
-    // 1. Mirror draw camera feed only (exact match to Particels1)
+    // Frame counter diagnostics
+    frameCountRef.current++
+    if (frameCountRef.current % 5 === 0) {
+      setFrameCount(frameCountRef.current)
+    }
+
+    // 1. Mirror draw camera feed only
     ctx.save()
     ctx.clearRect(0, 0, width, height)
     ctx.translate(width, 0)
@@ -387,10 +405,10 @@ export default function GestureController({
 
   return (
     <>
-      {/* Hidden capturing video stream */}
+      {/* Hidden capturing video stream styled to ensure browser always processes frames */}
       <video
-        ref={videoRef}
-        style={{ display: 'none' }}
+        id="webcam"
+        style={{ position: 'absolute', width: 0, height: 0, opacity: 0, pointerEvents: 'none' }}
         autoPlay
         playsInline
         muted
@@ -400,13 +418,13 @@ export default function GestureController({
       {active && (
         <div className="gesture-camera-preview animate-fade-in">
           <canvas
-            ref={canvasRef}
+            id="camera-canvas"
             width={200}
             height={150}
           />
           <div className="preview-indicator">
             <span className="pulse-dot"></span>
-            <span>LIVE GESTURE</span>
+            <span>LIVE GESTURE {frameCount > 0 ? `(${frameCount})` : '(CONNECTING)'}</span>
           </div>
         </div>
       )}
