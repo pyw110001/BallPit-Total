@@ -713,3 +713,139 @@ body {
   width: 100%;
   height: 100%;
 }
+
+/* Gesture Controller Webcam Preview Overlay */
+.gesture-camera-preview {
+  position: fixed;
+  top: 80px;
+  right: 20px;
+  z-index: 1000;
+  width: 200px;
+  height: 150px;
+  border-radius: 12px;
+  overflow: hidden;
+  background: rgba(8, 9, 20, 0.45);
+  border: 1px solid rgba(255, 255, 255, 0.15);
+  box-shadow: 0 10px 30px rgba(0, 0, 0, 0.5), inset 0 1px 0 rgba(255, 255, 255, 0.1);
+  backdrop-filter: blur(12px);
+  pointer-events: none;
+  display: flex;
+  flex-direction: column;
+}
+
+.gesture-camera-preview canvas {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
+.preview-indicator {
+  position: absolute;
+  bottom: 8px;
+  left: 8px;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  background: rgba(0, 0, 0, 0.6);
+  padding: 4px 10px;
+  border-radius: 20px;
+  font-size: 0.65rem;
+  font-weight: 600;
+  color: #10b981;
+  letter-spacing: 0.05em;
+  border: 1px solid rgba(255, 255, 255, 0.05);
+}
+
+.pulse-dot {
+  width: 6px;
+  height: 6px;
+  background-color: #10b981;
+  border-radius: 50%;
+  box-shadow: 0 0 8px #10b981;
+  animation: marker-pulse 1.5s infinite alternate;
+}
+
+@keyframes marker-pulse {
+  0% { transform: scale(0.9); opacity: 0.5; }
+  100% { transform: scale(1.3); opacity: 1; }
+}
+
+/* Custom Virtual Cursor */
+.gesture-virtual-cursor {
+  position: fixed;
+  width: 28px;
+  height: 28px;
+  margin-left: -14px;
+  margin-top: -14px;
+  z-index: 999999;
+  pointer-events: none;
+  transform: translate3d(0, 0, 0);
+  transition: transform 0.1s ease, width 0.2s ease, height 0.2s ease, margin 0.2s ease;
+}
+
+.cursor-ring {
+  position: absolute;
+  inset: 0;
+  border: 2px solid #3b82f6;
+  border-radius: 50%;
+  box-shadow: 0 0 10px rgba(59, 130, 246, 0.5);
+  animation: cursor-rotate 6s linear infinite;
+  transition: all 0.2s cubic-bezier(0.175, 0.885, 0.32, 1.275);
+}
+
+.cursor-dot {
+  position: absolute;
+  width: 6px;
+  height: 6px;
+  left: 50%;
+  top: 50%;
+  transform: translate(-50%, -50%);
+  background-color: #10b981;
+  border-radius: 50%;
+  box-shadow: 0 0 6px #10b981;
+  transition: all 0.2s ease;
+}
+
+/* Pinching State animation */
+.gesture-virtual-cursor.pinched .cursor-ring {
+  border-color: #ef4444;
+  transform: scale(0.6);
+  box-shadow: 0 0 12px rgba(239, 68, 68, 0.8);
+}
+
+.gesture-virtual-cursor.pinched .cursor-dot {
+  background-color: #ef4444;
+  transform: translate(-50%, -50%) scale(1.5);
+  box-shadow: 0 0 8px #ef4444;
+}
+
+@keyframes cursor-rotate {
+  from { transform: rotate(0deg); }
+  to { transform: rotate(360deg); }
+}
+
+/* Make body hide default cursor when gesture is active */
+body.gesture-cursor-active {
+  cursor: none !important;
+}
+body.gesture-cursor-active * {
+  cursor: none !important;
+}
+
+/* Gesture Status Toast Indicator */
+.gesture-status-toast {
+  margin-top: 16px;
+  background: rgba(16, 185, 129, 0.12);
+  border: 1px solid rgba(16, 185, 129, 0.25);
+  color: #10b981;
+  padding: 8px 18px;
+  border-radius: 20px;
+  font-size: 0.8rem;
+  font-weight: 600;
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  box-shadow: 0 0 12px rgba(16, 185, 129, 0.15);
+  letter-spacing: 0.05em;
+  backdrop-filter: blur(8px);
+}

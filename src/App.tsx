@@ -1,10 +1,11 @@
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import LusionConnectors from './components/lusion-connectors/LusionConnectors'
 import SSGISpheres from './components/ssgi-spheres/SSGISpheres'
 import GradientText from './components/GradientText'
 import BorderGlow from './components/BorderGlow'
 import ObjectClump from './components/object-clump/ObjectClump'
-import { Sparkles, Activity, Layers, ArrowRight, Sun, Box, Globe, Moon, Languages } from 'lucide-react'
+import { Sparkles, Activity, Layers, ArrowRight, Sun, Box, Globe, Moon, Languages, Camera } from 'lucide-react'
+import GestureController from './components/GestureController'
 
 type ViewType = 'portal' | 'lusion' | 'ssgi' | 'clump'
 
@@ -14,6 +15,7 @@ const portalTranslations = {
     title: "PHYSICS & LIGHT",
     subtitle: "A premium interactive playground comparing advanced real-time physics and post-processing lighting pipelines in WebGL.",
     gravityBtn: (enabled: boolean) => `Gravity: ${enabled ? '9.8 m/s²' : 'Zero-G'}`,
+    gestureBtn: (active: boolean) => `Gesture: ${active ? 'ON' : 'OFF'}`,
     themeLight: "Light Mode",
     themeDark: "Dark Mode",
     langToggle: "中文",
@@ -40,6 +42,7 @@ const portalTranslations = {
     title: "物理与光影",
     subtitle: "一个用于对比 WebGL 中高级实时物理引擎与后处理光影渲染管线的高端交互式游乐场。",
     gravityBtn: (enabled: boolean) => `重力: ${enabled ? '9.8 m/s²' : '无重力漂浮'}`,
+    gestureBtn: (active: boolean) => `手势控制: ${active ? '开启' : '关闭'}`,
     themeLight: "浅色模式",
     themeDark: "深色模式",
     langToggle: "English",
@@ -69,6 +72,20 @@ export default function App() {
   const [darkMode, setDarkMode] = useState<boolean>(true)
   const [isUIVisible, setIsUIVisible] = useState<boolean>(true)
   const [lang, setLang] = useState<'zh' | 'en'>('zh')
+  const [gestureActive, setGestureActive] = useState<boolean>(false)
+  const [gestureStatus, setGestureStatus] = useState<string>('')
+
+  // Control body cursor class when gesture is active
+  useEffect(() => {
+    if (gestureActive) {
+      document.body.classList.add('gesture-cursor-active')
+    } else {
+      document.body.classList.remove('gesture-cursor-active')
+    }
+    return () => {
+      document.body.classList.remove('gesture-cursor-active')
+    }
+  }, [gestureActive])
 
   const handleBack = () => {
     setCurrentView('portal')
@@ -133,7 +150,23 @@ export default function App() {
                 <Languages size={16} />
                 <span>{portalTranslations[lang].langToggle}</span>
               </button>
+
+              <button 
+                className={`btn btn-toggle ${gestureActive ? 'active' : ''}`}
+                onClick={() => setGestureActive(!gestureActive)}
+                title="Toggle Gesture Control"
+              >
+                <Camera size={16} />
+                <span>{portalTranslations[lang].gestureBtn(gestureActive)}</span>
+              </button>
             </div>
+
+            {/* Gesture Status Toast Indicator */}
+            {gestureActive && gestureStatus && (
+              <div className="gesture-status-toast animate-fade-in">
+                <span>{gestureStatus}</span>
+              </div>
+            )}
           </header>
 
           {/* Cards Grid */}
@@ -296,13 +329,22 @@ export default function App() {
                 <span>{portalTranslations[lang].backBtn}</span>
               </button>
               <div className="hud-title-node">{portalTranslations[lang].lusionTitle}</div>
-              <button 
-                className={`hud-gravity-btn ${gravityEnabled ? 'active' : ''}`}
-                onClick={() => setGravityEnabled(!gravityEnabled)}
-              >
-                <Globe size={14} />
-                <span>{gravityEnabled ? portalTranslations[lang].gravityOn : portalTranslations[lang].zeroG}</span>
-              </button>
+              <div style={{ display: 'flex', gap: '8px', pointerEvents: 'auto' }}>
+                <button 
+                  className={`hud-gravity-btn ${gestureActive ? 'active' : ''}`}
+                  onClick={() => setGestureActive(!gestureActive)}
+                >
+                  <Camera size={14} />
+                  <span>{gestureActive ? (lang === 'zh' ? '手势: 开' : 'Gesture: ON') : (lang === 'zh' ? '手势: 关' : 'Gesture: OFF')}</span>
+                </button>
+                <button 
+                  className={`hud-gravity-btn ${gravityEnabled ? 'active' : ''}`}
+                  onClick={() => setGravityEnabled(!gravityEnabled)}
+                >
+                  <Globe size={14} />
+                  <span>{gravityEnabled ? portalTranslations[lang].gravityOn : portalTranslations[lang].zeroG}</span>
+                </button>
+              </div>
             </div>
           ) : (
             <div className="immersive-hint">
@@ -328,13 +370,22 @@ export default function App() {
                 <span>{portalTranslations[lang].backBtn}</span>
               </button>
               <div className="hud-title-node">{portalTranslations[lang].ssgiTitle}</div>
-              <button 
-                className={`hud-gravity-btn ${gravityEnabled ? 'active' : ''}`}
-                onClick={() => setGravityEnabled(!gravityEnabled)}
-              >
-                <Globe size={14} />
-                <span>{gravityEnabled ? portalTranslations[lang].gravityOn : portalTranslations[lang].zeroG}</span>
-              </button>
+              <div style={{ display: 'flex', gap: '8px', pointerEvents: 'auto' }}>
+                <button 
+                  className={`hud-gravity-btn ${gestureActive ? 'active' : ''}`}
+                  onClick={() => setGestureActive(!gestureActive)}
+                >
+                  <Camera size={14} />
+                  <span>{gestureActive ? (lang === 'zh' ? '手势: 开' : 'Gesture: ON') : (lang === 'zh' ? '手势: 关' : 'Gesture: OFF')}</span>
+                </button>
+                <button 
+                  className={`hud-gravity-btn ${gravityEnabled ? 'active' : ''}`}
+                  onClick={() => setGravityEnabled(!gravityEnabled)}
+                >
+                  <Globe size={14} />
+                  <span>{gravityEnabled ? portalTranslations[lang].gravityOn : portalTranslations[lang].zeroG}</span>
+                </button>
+              </div>
             </div>
           ) : (
             <div className="immersive-hint">
@@ -360,13 +411,22 @@ export default function App() {
                 <span>{portalTranslations[lang].backBtn}</span>
               </button>
               <div className="hud-title-node">{portalTranslations[lang].clumpTitle}</div>
-              <button 
-                className={`hud-gravity-btn ${gravityEnabled ? 'active' : ''}`}
-                onClick={() => setGravityEnabled(!gravityEnabled)}
-              >
-                <Globe size={14} />
-                <span>{gravityEnabled ? portalTranslations[lang].gravityOn : portalTranslations[lang].zeroG}</span>
-              </button>
+              <div style={{ display: 'flex', gap: '8px', pointerEvents: 'auto' }}>
+                <button 
+                  className={`hud-gravity-btn ${gestureActive ? 'active' : ''}`}
+                  onClick={() => setGestureActive(!gestureActive)}
+                >
+                  <Camera size={14} />
+                  <span>{gestureActive ? (lang === 'zh' ? '手势: 开' : 'Gesture: ON') : (lang === 'zh' ? '手势: 关' : 'Gesture: OFF')}</span>
+                </button>
+                <button 
+                  className={`hud-gravity-btn ${gravityEnabled ? 'active' : ''}`}
+                  onClick={() => setGravityEnabled(!gravityEnabled)}
+                >
+                  <Globe size={14} />
+                  <span>{gravityEnabled ? portalTranslations[lang].gravityOn : portalTranslations[lang].zeroG}</span>
+                </button>
+              </div>
             </div>
           ) : (
             <div className="immersive-hint">
@@ -375,6 +435,13 @@ export default function App() {
           )}
         </div>
       )}
+
+      {/* Global MediaPipe Gesture Controller */}
+      <GestureController 
+        active={gestureActive} 
+        onStatusChange={setGestureStatus} 
+        lang={lang} 
+      />
     </div>
   )
 }
