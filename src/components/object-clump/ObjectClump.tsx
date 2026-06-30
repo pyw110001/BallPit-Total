@@ -81,8 +81,6 @@ export default function ObjectClump({
     return arr
   }, [])
 
-  const texture = useTexture("/textures/cross.jpg")
-
   return (
     <div className="demo-canvas-container">
       <Canvas
@@ -103,19 +101,13 @@ export default function ObjectClump({
           shadow-mapSize={[512, 512]}
         />
         
-        {/* Setup Rapier Physics with consistent parameters to Lusion & SSGI Spheres */}
-        <Physics gravity={[0, gravityEnabled ? -9.81 : 0, 0]}>
-          <Pointer />
-          {spheres.map((props, i) => (
-            <Sphere
-              key={i}
-              position={props.position}
-              material={baubleMaterial}
-              texture={texture}
-              outlinesThickness={outlineThicknesses[outlineIndex]}
-            />
-          ))}
-        </Physics>
+        {/* Render ClumpScene inside Canvas context so useTexture hook resolves correctly */}
+        <ClumpScene
+          spheres={spheres}
+          material={baubleMaterial}
+          outlinesThickness={outlineThicknesses[outlineIndex]}
+          gravityEnabled={gravityEnabled}
+        />
 
         {/* Load environment and postprocessing effects */}
         <Environment files="/textures/adamsbridge.hdr" />
@@ -239,5 +231,33 @@ function Pointer() {
     <RigidBody position={[0, 0, 0]} type="kinematicPosition" colliders={false} ref={ref}>
       <BallCollider args={[1.5]} /> {/* Small pointer collision radius (similar to other effects) */}
     </RigidBody>
+  )
+}
+
+function ClumpScene({
+  spheres,
+  material,
+  outlinesThickness,
+  gravityEnabled
+}: {
+  spheres: { position: [number, number, number] }[]
+  material: THREE.Material
+  outlinesThickness: number
+  gravityEnabled: boolean
+}) {
+  const texture = useTexture("/textures/cross.jpg")
+  return (
+    <Physics gravity={[0, gravityEnabled ? -9.81 : 0, 0]}>
+      <Pointer />
+      {spheres.map((props, i) => (
+        <Sphere
+          key={i}
+          position={props.position}
+          material={material}
+          texture={texture}
+          outlinesThickness={outlinesThickness}
+        />
+      ))}
+    </Physics>
   )
 }
