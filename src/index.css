@@ -773,24 +773,51 @@ body {
 /* Custom Virtual Cursor */
 .gesture-virtual-cursor {
   position: fixed;
-  width: 28px;
-  height: 28px;
-  margin-left: -14px;
-  margin-top: -14px;
+  width: 36px;
+  height: 36px;
+  margin-left: -18px;
+  margin-top: -18px;
   z-index: 999999;
   pointer-events: none;
   transform: translate3d(0, 0, 0);
-  transition: transform 0.1s ease, width 0.2s ease, height 0.2s ease, margin 0.2s ease;
+  transition: transform 0.08s ease;
 }
 
 .cursor-ring {
   position: absolute;
   inset: 0;
-  border: 2px solid #3b82f6;
+  border: 2px solid rgba(99, 102, 241, 0.25);
   border-radius: 50%;
-  box-shadow: 0 0 10px rgba(59, 130, 246, 0.5);
-  animation: cursor-rotate 6s linear infinite;
-  transition: all 0.2s cubic-bezier(0.175, 0.885, 0.32, 1.275);
+  box-shadow: 0 0 6px rgba(99, 102, 241, 0.1);
+  transition: all 0.2s ease;
+}
+
+/* Dwell click progress loader */
+.cursor-progress-svg {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%) rotate(-90deg);
+  width: 36px;
+  height: 36px;
+  pointer-events: none;
+}
+
+.cursor-progress-svg circle {
+  fill: none;
+  stroke-width: 2.5;
+}
+
+.cursor-progress-svg .progress-bg {
+  stroke: rgba(255, 255, 255, 0.08);
+}
+
+.cursor-progress-svg .progress-bar {
+  stroke: #10b981;
+  stroke-dasharray: 94.2; /* 2 * Math.PI * 15 */
+  stroke-dashoffset: calc(94.2 - (94.2 * var(--hover-progress, 0)));
+  stroke-linecap: round;
+  transition: stroke-dashoffset 0.05s linear;
 }
 
 .cursor-dot {
@@ -806,7 +833,7 @@ body {
   transition: all 0.2s ease;
 }
 
-/* Pinching State animation */
+/* Pinching / Hover Clicked Pop State animation */
 .gesture-virtual-cursor.pinched .cursor-ring {
   border-color: #ef4444;
   transform: scale(0.6);
@@ -815,7 +842,7 @@ body {
 
 .gesture-virtual-cursor.pinched .cursor-dot {
   background-color: #ef4444;
-  transform: translate(-50%, -50%) scale(1.5);
+  transform: translate(-50%, -50%) scale(1.6);
   box-shadow: 0 0 8px #ef4444;
 }
 

@@ -40,6 +40,9 @@ export default function GestureController({
   // Click states
   const isPinchedRef = useRef(false)
   const lastClickTime = useRef(0)
+  const hoverStartPos = useRef({ x: 0, y: 0 })
+  const hoverStartTime = useRef<number | null>(null)
+  const clickTriggered = useRef(false)
   
   // Scroll states
   const lastLeftWristY = useRef<number | null>(null)
@@ -321,50 +324,45 @@ export default function GestureController({
             )
           }
 
-          // Track RIGHT_INDEX (20), RIGHT_PINKY (18), and RIGHT_WRIST (16) for right hand fist click gesture
-          const rightIndex = landmarks[20]
-          const rightPinky = landmarks[18]
-          const leftShoulder = landmarks[11]
-          const rightShoulder = landmarks[12]
+          // Dwell Hover Click Logic
+          const dx = cx - hoverStartPos.current.x
+          const dy = cy - hoverStartPos.current.y
+          const dist = Math.sqrt(dx * dx + dy * dy)
 
-          if (rightIndex && rightPinky && leftShoulder && rightShoulder &&
-              rightIndex.visibility > 0.3 && rightPinky.visibility > 0.3 &&
-              leftShoulder.visibility > 0.5 && rightShoulder.visibility > 0.5) {
-            
-            const shoulderDist = dist3D(leftShoulder, rightShoulder)
-            if (shoulderDist > 0.05) {
-              const wristToIndex = dist3D(rightWrist, rightIndex)
-              const wristToPinky = dist3D(rightWrist, rightPinky)
-              const avgHandDist = (wristToIndex + wristToPinky) / 2.0
-              const handRatio = avgHandDist / shoulderDist
+          if (dist > 15) { // If cursor moves more than 15px, reset hover
+            hoverStartPos.current = { x: cx, y: cy }
+            hoverStartTime.current = Date.now()
+            clickTriggered.current = false
+            if (virtualCursorDom.current) {
+              virtualCursorDom.current.style.setProperty('--hover-progress', '0')
+              virtualCursorDom.current.classList.remove('pinched')
+            }
+          } else { // Still hovering in range
+            if (!clickTriggered.current) {
+              if (hoverStartTime.current === null) {
+                hoverStartTime.current = Date.now()
+              }
+              const elapsed = Date.now() - hoverStartTime.current
+              const progress = Math.min(elapsed / 800, 1.0) // 800ms hover duration
 
-              // Fist (握拳) click threshold: hand ratio drops when fingers fold in
-              if (handRatio < 0.115) {
-                if (!isPinchedRef.current) {
-                  isPinchedRef.current = true
-                  triggerClick(cx, cy)
-                  if (virtualCursorDom.current) {
-                    virtualCursorDom.current.classList.add('pinched')
-                  }
+              if (virtualCursorDom.current) {
+                virtualCursorDom.current.style.setProperty('--hover-progress', progress.toString())
+              }
+
+              if (elapsed >= 800) {
+                clickTriggered.current = true
+                triggerClick(cx, cy)
+                
+                // Add click pop/pulse animation visual feedback
+                if (virtualCursorDom.current) {
+                  virtualCursorDom.current.classList.add('pinched')
                 }
-              } else if (handRatio > 0.145) {
-                if (isPinchedRef.current) {
-                  isPinchedRef.current = false
+                setTimeout(() => {
                   if (virtualCursorDom.current) {
                     virtualCursorDom.current.classList.remove('pinched')
                   }
-                }
+                }, 250)
               }
-
-              // Draw right hand fist indicator line on camera preview (mirror coordinates manually: 1.0 - x)
-              ctx.strokeStyle = isPinchedRef.current ? 'rgba(255, 64, 96, 0.8)' : 'rgba(32, 255, 160, 0.8)'
-              ctx.lineWidth = 3
-              ctx.beginPath()
-              ctx.moveTo((1.0 - rightWrist.x) * width, rightWrist.y * height)
-              ctx.lineTo((1.0 - rightIndex.x) * width, rightIndex.y * height)
-              ctx.moveTo((1.0 - rightWrist.x) * width, rightWrist.y * height)
-              ctx.lineTo((1.0 - rightPinky.x) * width, rightPinky.y * height)
-              ctx.stroke()
             }
           }
         }
@@ -465,10 +463,8 @@ export default function GestureController({
     drawLine(landmarks[11], landmarks[13], 'rgba(168, 85, 247, 0.5)')
     drawLine(landmarks[13], landmarks[15], 'rgba(168, 85, 247, 0.8)', 3)
 
-    // Hand components (Fist tracking: wrist 16, index 20, pinky 18)
+    // Hand components (Hover tracking: right wrist 16)
     drawPoint(landmarks[16], '#3b82f6', 6)  // Right Wrist (Blue)
-    drawPoint(landmarks[20], '#10b981', 5)  // Right Index (Green)
-    drawPoint(landmarks[18], '#f59e0b', 5)  // Right Pinky (Orange)
 
     // Left wrist
     drawPoint(landmarks[15], '#a855f7', 6)  // Left Wrist (Purple)
@@ -554,7 +550,7 @@ export default function GestureController({
             <span style={{ color: '#6366f1', fontWeight: 'bold' }}>👉 {lang === 'zh' ? '右手腕' : 'Right Wrist'}</span>: {lang === 'zh' ? '控制光标移动' : 'Move cursor'}
           </li>
           <li style={{ marginBottom: '6px' }}>
-            <span style={{ color: '#10b981', fontWeight: 'bold' }}>✊ 右手握拳</span>: {lang === 'zh' ? '鼠标左键点击' : 'Mouse Click'}
+            <span style={{ color: '#10b981', fontWeight: 'bold' }}>⏱️ {lang === 'zh' ? '悬停 0.8s' : 'Hover 0.8s'}</span>: {lang === 'zh' ? '自动触发点击' : 'Auto Click'}
           </li>
           <li style={{ marginBottom: '6px' }}>
             <span style={{ color: '#a855f7', fontWeight: 'bold' }}>✋ {lang === 'zh' ? '左手上下' : 'Left Up/Down'}</span>: {lang === 'zh' ? '滚轮缩放视角' : 'Scroll to Zoom'}
@@ -580,7 +576,10 @@ export default function GestureController({
           display: (active && enableInteraction) ? 'block' : 'none'
         }}
       >
-        <div className="cursor-ring"></div>
+        <svg className="cursor-progress-svg" width="36" height="36">
+          <circle className="progress-bg" cx="18" cy="18" r="15"></circle>
+          <circle className="progress-bar" cx="18" cy="18" r="15"></circle>
+        </svg>
         <div className="cursor-dot"></div>
       </div>
     </>
