@@ -1,14 +1,13 @@
 import { useRef, useMemo, useState, useReducer } from 'react'
 import * as THREE from 'three'
-import { Canvas, useFrame, useThree } from '@react-three/fiber'
+import { Canvas, useFrame } from '@react-three/fiber'
 import { Environment, useTexture } from '@react-three/drei'
-import { Physics, InstancedRigidBodies, RigidBody, BallCollider, RapierRigidBody } from '@react-three/rapier'
+import { Physics, RigidBody, BallCollider } from '@react-three/rapier'
 import { EffectComposer, N8AO, SMAA } from '@react-three/postprocessing'
 import { Outlines } from './Outlines'
 
 const rfs = THREE.MathUtils.randFloatSpread
 const count = 40
-const sphereGeometry = new THREE.SphereGeometry(1, 32, 32)
 
 const colorThemes = ["white", "#a5b4fc", "#fbbf24", "#34d399", "#f87171"]
 const colorThemeNames = {
@@ -60,7 +59,6 @@ export default function ObjectClump({
   isUIVisible?: boolean
   lang?: 'zh' | 'en'
 }) {
-  const [mouseActive, setMouseActive] = useState(false)
   const [accent, cycleAccent] = useReducer((state: number) => ++state % colorThemes.length, 0)
   const [outlineIndex, setOutlineIndex] = useState(2) // Default to "Medium" outline
 
@@ -72,21 +70,27 @@ export default function ObjectClump({
     })
   }, [accent])
 
+  // Generate initial random scattered positions for the 40 spheres
+  const spheres = useMemo(() => {
+    const arr = []
+    for (let i = 0; i < count; i++) {
+      arr.push({
+        position: [rfs(10), rfs(10), rfs(10)] as [number, number, number]
+      })
+    }
+    return arr
+  }, [])
+
+  const texture = useTexture("/textures/cross.jpg")
+
   return (
-    <div 
-      className="demo-canvas-container"
-      onPointerEnter={() => setMouseActive(true)}
-      onPointerLeave={() => setMouseActive(false)}
-      onPointerMove={() => {
-        if (!mouseActive) setMouseActive(true)
-      }}
-    >
+    <div className="demo-canvas-container">
       <Canvas
         onClick={cycleAccent}
         shadows
         gl={{ antialias: false }}
         dpr={[1, 1.5]}
-        camera={{ position: [0, 0, 20], fov: 35, near: 1, far: 40 }}
+        camera={{ position: [0, 0, 15], fov: 17.5, near: 1, far: 20 }}
       >
         <ambientLight intensity={0.5} />
         <color attach="background" args={["#e5e7eb"]} />
@@ -99,13 +103,18 @@ export default function ObjectClump({
           shadow-mapSize={[512, 512]}
         />
         
-        {/* Setup Rapier Physics with upward gravity when enabled to match original cannon behavior */}
-        <Physics gravity={[0, gravityEnabled ? 2.0 : 0.0, 0]}>
-          <Pointer active={mouseActive} />
-          <Clump
-            material={baubleMaterial}
-            outlinesThickness={outlineThicknesses[outlineIndex]}
-          />
+        {/* Setup Rapier Physics with consistent parameters to Lusion & SSGI Spheres */}
+        <Physics gravity={[0, gravityEnabled ? -9.81 : 0, 0]}>
+          <Pointer />
+          {spheres.map((props, i) => (
+            <Sphere
+              key={i}
+              position={props.position}
+              material={baubleMaterial}
+              texture={texture}
+              outlinesThickness={outlineThicknesses[outlineIndex]}
+            />
+          ))}
         </Physics>
 
         {/* Load environment and postprocessing effects */}
@@ -173,80 +182,62 @@ export default function ObjectClump({
   )
 }
 
-function Clump({
+function Sphere({
+  position,
   material,
+  texture,
   outlinesThickness
 }: {
+  position: [number, number, number]
   material: THREE.Material
+  texture: THREE.Texture
   outlinesThickness: number
 }) {
-  const texture = useTexture("/textures/cross.jpg")
-  const apiRef = useRef<RapierRigidBody[]>([])
+  const api = useRef<any>(null)
+  const vec = useMemo(() => new THREE.Vector3(), [])
 
-  const instances = useMemo(() => {
-    const arr = []
-    for (let i = 0; i < count; i++) {
-      arr.push({
-        key: i,
-        position: [rfs(20), rfs(20), rfs(20)] as [number, number, number],
-        rotation: [0, 0, 0] as [number, number, number]
-      })
-    }
-    return arr
-  }, [])
-
-  // Apply continuous spring force towards the center (0,0,0) to clump them gently
+  // Consistently attract spheres to origin using applyImpulse (exactly like Lusion Connectors & SSGI Spheres)
   useFrame(() => {
-    if (!apiRef.current) return
-    apiRef.current.forEach((api) => {
-      if (!api) return
-      const pos = api.translation()
-      // Spring force F = -k * x ensures force decreases to 0 at the origin,
-      // avoiding massive overlapping collisions and explosion oscillations.
-      const k = 15.0
-      api.addForce({
-        x: -pos.x * k,
-        y: -pos.y * k,
-        z: -pos.z * k
-      }, true)
-    })
+    if (api.current) {
+      const translation = api.current.translation()
+      vec.set(translation.x, translation.y, translation.z)
+      api.current.applyImpulse(vec.negate().multiplyScalar(0.2), true)
+    }
   })
 
   return (
-    <InstancedRigidBodies
-      ref={apiRef}
-      instances={instances}
-      colliders="ball"
-      linearDamping={0.65}
-      angularDamping={0.1}
+    <RigidBody
+      ref={api}
+      linearDamping={4}
+      angularDamping={1}
+      friction={0.1}
+      position={position}
+      colliders={false}
     >
-      <instancedMesh args={[sphereGeometry, material, count]} castShadow receiveShadow material-map={texture}>
+      <BallCollider args={[1]} />
+      <mesh castShadow receiveShadow material={material} material-map={texture}>
+        <sphereGeometry args={[1, 32, 32]} />
         <Outlines thickness={outlinesThickness} color="black" />
-      </instancedMesh>
-    </InstancedRigidBodies>
+      </mesh>
+    </RigidBody>
   )
 }
 
-function Pointer({ active }: { active: boolean }) {
-  const viewport = useThree((state) => state.viewport)
-  const pointerRef = useRef<RapierRigidBody>(null)
+function Pointer() {
+  const ref = useRef<any>(null)
+  const vec = useMemo(() => new THREE.Vector3(), [])
   
-  useFrame((state) => {
-    if (pointerRef.current) {
-      if (active) {
-        const x = (state.mouse.x * viewport.width) / 2
-        const y = (state.mouse.y * viewport.height) / 2
-        pointerRef.current.setNextKinematicTranslation({ x, y, z: 0 })
-      } else {
-        // Place pointer far away out of bounds so it doesn't affect spheres
-        pointerRef.current.setNextKinematicTranslation({ x: 0, y: 0, z: -100 })
-      }
+  useFrame(({ mouse, viewport }) => {
+    if (ref.current) {
+      ref.current.setNextKinematicTranslation(
+        vec.set((mouse.x * viewport.width) / 2, (mouse.y * viewport.height) / 2, 0)
+      )
     }
   })
 
   return (
-    <RigidBody ref={pointerRef} type="kinematicPosition" colliders={false} position={[0, 0, -100]}>
-      <BallCollider args={[3]} />
+    <RigidBody position={[0, 0, 0]} type="kinematicPosition" colliders={false} ref={ref}>
+      <BallCollider args={[1.5]} /> {/* Small pointer collision radius (similar to other effects) */}
     </RigidBody>
   )
 }
