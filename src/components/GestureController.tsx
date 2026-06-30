@@ -229,7 +229,7 @@ export default function GestureController({
   }
 
   const onPoseResults = (results: any) => {
-    if (!active || !canvasRef.current || !results.poseLandmarks) return
+    if (!active || !canvasRef.current) return
 
     const canvas = canvasRef.current
     const ctx = canvas.getContext('2d')
@@ -237,7 +237,7 @@ export default function GestureController({
 
     const { width, height } = canvas
 
-    // 1. Draw mirrored webcam image
+    // 1. Draw mirrored webcam image (always show video to user)
     ctx.save()
     ctx.clearRect(0, 0, width, height)
     ctx.translate(width, 0)
@@ -247,123 +247,126 @@ export default function GestureController({
     // Landmarks array
     const landmarks = results.poseLandmarks
 
-    // 2. Track RIGHT_WRIST (16) for cursor positioning
-    const rightWrist = landmarks[16]
-    if (rightWrist && rightWrist.visibility > 0.5) {
-      // Mirrored coordinates mapping
-      const targetX = (1 - rightWrist.x) * window.innerWidth
-      const targetY = rightWrist.y * window.innerHeight
+    // Draw skeletal graphics and perform event dispatching only if landmarks are successfully detected
+    if (landmarks) {
+      // 2. Track RIGHT_WRIST (16) for cursor positioning
+      const rightWrist = landmarks[16]
+      if (rightWrist && rightWrist.visibility > 0.5) {
+        // Mirrored coordinates mapping
+        const targetX = (1 - rightWrist.x) * window.innerWidth
+        const targetY = rightWrist.y * window.innerHeight
 
-      // Smooth cursor (LERP)
-      cursorRef.current.x += (targetX - cursorRef.current.x) * 0.22
-      cursorRef.current.y += (targetY - cursorRef.current.y) * 0.22
+        // Smooth cursor (LERP)
+        cursorRef.current.x += (targetX - cursorRef.current.x) * 0.22
+        cursorRef.current.y += (targetY - cursorRef.current.y) * 0.22
 
-      const cx = cursorRef.current.x
-      const cy = cursorRef.current.y
+        const cx = cursorRef.current.x
+        const cy = cursorRef.current.y
 
-      // Update cursor DOM element position
-      if (virtualCursorDom.current) {
-        virtualCursorDom.current.style.left = `${cx}px`
-        virtualCursorDom.current.style.top = `${cy}px`
-      }
-
-      // Dispatch MouseMove and PointerMove events at the target element
-      const targetElement = document.elementFromPoint(cx, cy)
-      if (targetElement) {
-        targetElement.dispatchEvent(
-          new MouseEvent('mousemove', {
-            clientX: cx,
-            clientY: cy,
-            bubbles: true,
-            cancelable: true
-          })
-        )
-        targetElement.dispatchEvent(
-          new PointerEvent('pointermove', {
-            clientX: cx,
-            clientY: cy,
-            bubbles: true,
-            cancelable: true
-          })
-        )
-      }
-
-      // 3. Track right index (19) and right thumb (21) for click pinch gesture
-      const rightIndex = landmarks[19]
-      const rightThumb = landmarks[21]
-
-      if (rightIndex && rightThumb && rightIndex.visibility > 0.4 && rightThumb.visibility > 0.4) {
-        const dx = rightIndex.x - rightThumb.x
-        const dy = rightIndex.y - rightThumb.y
-        const dist = Math.sqrt(dx * dx + dy * dy)
-
-        // Hysteresis click threshold
-        if (dist < 0.035) {
-          if (!isPinchedRef.current) {
-            isPinchedRef.current = true
-            triggerClick(cx, cy)
-            if (virtualCursorDom.current) {
-              virtualCursorDom.current.classList.add('pinched')
-            }
-          }
-        } else if (dist > 0.055) {
-          if (isPinchedRef.current) {
-            isPinchedRef.current = false
-            if (virtualCursorDom.current) {
-              virtualCursorDom.current.classList.remove('pinched')
-            }
-          }
+        // Update cursor DOM element position
+        if (virtualCursorDom.current) {
+          virtualCursorDom.current.style.left = `${cx}px`
+          virtualCursorDom.current.style.top = `${cy}px`
         }
 
-        // Draw indicator line on camera preview
-        ctx.strokeStyle = isPinchedRef.current ? 'rgba(255, 64, 96, 0.8)' : 'rgba(32, 255, 160, 0.8)'
-        ctx.lineWidth = 3
-        ctx.beginPath()
-        ctx.moveTo(rightIndex.x * width, rightIndex.y * height)
-        ctx.lineTo(rightThumb.x * width, rightThumb.y * height)
-        ctx.stroke()
-      }
-    }
+        // Dispatch MouseMove and PointerMove events at the target element
+        const targetElement = document.elementFromPoint(cx, cy)
+        if (targetElement) {
+          targetElement.dispatchEvent(
+            new MouseEvent('mousemove', {
+              clientX: cx,
+              clientY: cy,
+              bubbles: true,
+              cancelable: true
+            })
+          )
+          targetElement.dispatchEvent(
+            new PointerEvent('pointermove', {
+              clientX: cx,
+              clientY: cy,
+              bubbles: true,
+              cancelable: true
+            })
+          )
+        }
 
-    // 4. Track LEFT_WRIST (15) for scroll wheel mapping
-    const leftWrist = landmarks[15]
-    if (leftWrist && leftWrist.visibility > 0.5) {
-      if (lastLeftWristY.current !== null) {
-        const deltaY = leftWrist.y - lastLeftWristY.current
-        
-        // Hysteresis vertical motion detection
-        if (Math.abs(deltaY) > 0.015) {
-          leftWristActiveCount.current++
+        // 3. Track right index (19) and right thumb (21) for click pinch gesture
+        const rightIndex = landmarks[19]
+        const rightThumb = landmarks[21]
+
+        if (rightIndex && rightThumb && rightIndex.visibility > 0.4 && rightThumb.visibility > 0.4) {
+          const dx = rightIndex.x - rightThumb.x
+          const dy = rightIndex.y - rightThumb.y
+          const dist = Math.sqrt(dx * dx + dy * dy)
+
+          // Hysteresis click threshold
+          if (dist < 0.035) {
+            if (!isPinchedRef.current) {
+              isPinchedRef.current = true
+              triggerClick(cx, cy)
+              if (virtualCursorDom.current) {
+                virtualCursorDom.current.classList.add('pinched')
+              }
+            }
+          } else if (dist > 0.055) {
+            if (isPinchedRef.current) {
+              isPinchedRef.current = false
+              if (virtualCursorDom.current) {
+                virtualCursorDom.current.classList.remove('pinched')
+              }
+            }
+          }
+
+          // Draw indicator line on camera preview
+          ctx.strokeStyle = isPinchedRef.current ? 'rgba(255, 64, 96, 0.8)' : 'rgba(32, 255, 160, 0.8)'
+          ctx.lineWidth = 3
+          ctx.beginPath()
+          ctx.moveTo(rightIndex.x * width, rightIndex.y * height)
+          ctx.lineTo(rightThumb.x * width, rightThumb.y * height)
+          ctx.stroke()
+        }
+      }
+
+      // 4. Track LEFT_WRIST (15) for scroll wheel mapping
+      const leftWrist = landmarks[15]
+      if (leftWrist && leftWrist.visibility > 0.5) {
+        if (lastLeftWristY.current !== null) {
+          const deltaY = leftWrist.y - lastLeftWristY.current
           
-          if (leftWristActiveCount.current > 1) { // Debounce slightly
-            const cx = cursorRef.current.x
-            const cy = cursorRef.current.y
-            const targetElement = document.elementFromPoint(cx, cy)
+          // Hysteresis vertical motion detection
+          if (Math.abs(deltaY) > 0.015) {
+            leftWristActiveCount.current++
             
-            if (targetElement) {
-              // Dispatch wheel scroll event (scale deltaY for zoom effect)
-              targetElement.dispatchEvent(
-                new WheelEvent('wheel', {
-                  deltaY: deltaY * 2500,
-                  bubbles: true,
-                  cancelable: true
-                })
-              )
+            if (leftWristActiveCount.current > 1) { // Debounce slightly
+              const cx = cursorRef.current.x
+              const cy = cursorRef.current.y
+              const targetElement = document.elementFromPoint(cx, cy)
+              
+              if (targetElement) {
+                // Dispatch wheel scroll event (scale deltaY for zoom effect)
+                targetElement.dispatchEvent(
+                  new WheelEvent('wheel', {
+                    deltaY: deltaY * 2500,
+                    bubbles: true,
+                    cancelable: true
+                  })
+                )
+              }
             }
+          } else {
+            leftWristActiveCount.current = 0
           }
-        } else {
-          leftWristActiveCount.current = 0
         }
+        lastLeftWristY.current = leftWrist.y
+      } else {
+        lastLeftWristY.current = null
+        leftWristActiveCount.current = 0
       }
-      lastLeftWristY.current = leftWrist.y
-    } else {
-      lastLeftWristY.current = null
-      leftWristActiveCount.current = 0
+
+      // 5. Draw skeletal indicators in the preview window (mirrored)
+      drawSkeleton(ctx, landmarks, width, height)
     }
 
-    // 5. Draw skeletal indicators in the preview window (mirrored)
-    drawSkeleton(ctx, landmarks, width, height)
-    
     ctx.restore()
   }
 
@@ -437,8 +440,8 @@ export default function GestureController({
       <video
         ref={videoRef}
         style={{ display: 'none' }}
-        autoplay
-        playsinline
+        autoPlay
+        playsInline
         muted
       />
 
