@@ -15,6 +15,7 @@ export default function GestureController({
   const [error, setError] = useState<string | null>(null)
   const [statusKey, setStatusKey] = useState<'initializing' | 'ready' | 'error' | 'disabled'>('initializing')
   const [frameCount, setFrameCount] = useState(0)
+  const [debugInfo, setDebugInfo] = useState<string>('Booting...')
   
   const poseRef = useRef<any>(null)
   const cameraRef = useRef<any>(null)
@@ -56,11 +57,14 @@ export default function GestureController({
   useEffect(() => {
     let activeLocal = true
     setStatusKey('initializing')
+    setDebugInfo('Script checking started...')
 
     // Polling to wait for MediaPipe scripts (loaded statically in index.html) to be defined on window
     const checkInterval = setInterval(() => {
       const PoseClass = (window as any).Pose
       const CameraClass = (window as any).Camera
+      
+      setDebugInfo(`Globals: Pose=${!!PoseClass}, Camera=${!!CameraClass}`)
       
       if (PoseClass && CameraClass) {
         clearInterval(checkInterval)
@@ -77,6 +81,7 @@ export default function GestureController({
       if (activeLocal && (!window.hasOwnProperty('Pose') || !window.hasOwnProperty('Camera'))) {
         setError('MediaPipe loading timeout')
         setStatusKey('error')
+        setDebugInfo('MediaPipe script load timeout!')
       }
     }, 15000)
 
@@ -99,6 +104,7 @@ export default function GestureController({
         setStatusKey('disabled')
         setFrameCount(0)
         frameCountRef.current = 0
+        setDebugInfo('Gesture control disabled')
         const canvas = document.getElementById('camera-canvas') as HTMLCanvasElement
         if (canvas) {
           const ctx = canvas.getContext('2d')
@@ -112,6 +118,7 @@ export default function GestureController({
     if (cameraRef.current) {
       try {
         cameraRef.current.stop()
+        setDebugInfo('Camera stopped')
       } catch (e) {
         console.warn('Camera stop error:', e)
       }
@@ -131,6 +138,7 @@ export default function GestureController({
     // Fetch video element directly by ID (avoiding React Ref timing race conditions)
     const videoElement = document.getElementById('webcam') as HTMLVideoElement
     if (!videoElement) {
+      setDebugInfo('Webcam DOM not ready, retrying...')
       // Retry slightly later if DOM element is not mounted yet
       setTimeout(startCamera, 100)
       return
@@ -140,24 +148,45 @@ export default function GestureController({
       const CameraClass = (window as any).Camera
       if (!CameraClass) {
         setStatusKey('error')
+        setDebugInfo('Camera class not found')
         return
       }
 
+      setDebugInfo('Instantiating camera...')
       // Initialize camera directly using MediaPipe's Camera helper
       cameraRef.current = new CameraClass(videoElement, {
         onFrame: async () => {
           if (poseRef.current && active) {
-            await poseRef.current.send({ image: videoElement })
+            try {
+              await poseRef.current.send({ image: videoElement })
+            } catch (err: any) {
+              setDebugInfo(`Pose.send error: ${err.message}`)
+            }
           }
         },
         width: 320,
         height: 240
       })
-      await cameraRef.current.start()
+      
+      setDebugInfo('Starting Camera...')
+      const startPromise = cameraRef.current.start()
+      if (startPromise && typeof startPromise.then === 'function') {
+        startPromise
+          .then(() => {
+            setDebugInfo('Camera start promise resolved!')
+          })
+          .catch((err: any) => {
+            setDebugInfo(`Camera start promise rejected: ${err.message}`)
+            setStatusKey('error')
+          })
+      } else {
+        setDebugInfo('Camera started (sync/no promise)')
+      }
     } catch (err: any) {
       console.error('Camera start failed:', err)
       setError(err.message || 'Webcam error')
       setStatusKey('error')
+      setDebugInfo(`Camera exception: ${err.message}`)
     }
   }
 
@@ -165,28 +194,35 @@ export default function GestureController({
     const PoseClass = (window as any).Pose
     if (!PoseClass) {
       setStatusKey('error')
+      setDebugInfo('Pose class not found')
       return
     }
 
-    const pose = new PoseClass({
-      locateFile: (file: string) => `https://cdn.jsdelivr.net/npm/@mediapipe/pose/${file}`
-    })
+    try {
+      const pose = new PoseClass({
+        locateFile: (file: string) => `https://cdn.jsdelivr.net/npm/@mediapipe/pose/${file}`
+      })
 
-    pose.setOptions({
-      modelComplexity: 1,
-      smoothLandmarks: true,
-      minDetectionConfidence: 0.5,
-      minTrackingConfidence: 0.5
-    })
+      pose.setOptions({
+        modelComplexity: 1,
+        smoothLandmarks: true,
+        minDetectionConfidence: 0.5,
+        minTrackingConfidence: 0.5
+      })
 
-    pose.onResults(onPoseResults)
-    poseRef.current = pose
+      pose.onResults(onPoseResults)
+      poseRef.current = pose
+      setDebugInfo('Pose initialized successfully')
 
-    if (active) {
-      startCamera()
-      setStatusKey('ready')
-    } else {
-      setStatusKey('disabled')
+      if (active) {
+        startCamera()
+        setStatusKey('ready')
+      } else {
+        setStatusKey('disabled')
+      }
+    } catch (err: any) {
+      setDebugInfo(`Pose init error: ${err.message}`)
+      setStatusKey('error')
     }
   }
 
@@ -207,6 +243,9 @@ export default function GestureController({
     if (frameCountRef.current % 5 === 0) {
       setFrameCount(frameCountRef.current)
     }
+    
+    // Always update debug info with frame count and landmarks presence
+    setDebugInfo(`Frame: ${frameCountRef.current}, Landmarks: ${!!results.poseLandmarks}`)
 
     // 1. Mirror draw camera feed only
     ctx.save()
@@ -416,11 +455,31 @@ export default function GestureController({
 
       {/* Floating webcam skeletal preview canvas */}
       {active && (
-        <div className="gesture-camera-preview animate-fade-in">
+        <div className="gesture-camera-preview animate-fade-in" style={{ position: 'fixed' }}>
+          {/* Debug Overlay Panel */}
+          <div style={{
+            position: 'absolute',
+            top: '8px',
+            left: '8px',
+            right: '8px',
+            background: 'rgba(0, 0, 0, 0.8)',
+            color: '#10b981',
+            fontSize: '9px',
+            fontFamily: 'monospace',
+            padding: '6px 10px',
+            borderRadius: '6px',
+            pointerEvents: 'none',
+            wordBreak: 'break-all',
+            border: '1px solid rgba(255, 255, 255, 0.1)',
+            zIndex: 20
+          }}>
+            {debugInfo}
+          </div>
           <canvas
             id="camera-canvas"
             width={200}
             height={150}
+            style={{ display: 'block', width: '100%', height: '100%' }}
           />
           <div className="preview-indicator">
             <span className="pulse-dot"></span>
