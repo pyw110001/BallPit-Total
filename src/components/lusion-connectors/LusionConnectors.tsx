@@ -1,7 +1,7 @@
 import * as THREE from 'three'
 import { useRef, useReducer, useMemo } from 'react'
 import { Canvas, useFrame } from '@react-three/fiber'
-import { useGLTF, MeshTransmissionMaterial, Environment, Lightformer } from '@react-three/drei'
+import { Environment, Lightformer, useGLTF, MeshTransmissionMaterial, OrbitControls } from '@react-three/drei'
 import { CuboidCollider, BallCollider, Physics, RigidBody } from '@react-three/rapier'
 import { EffectComposer, N8AO } from '@react-three/postprocessing'
 import { easing } from 'maath'
@@ -77,11 +77,14 @@ export default function LusionConnectors({
         shadows
         dpr={[1, 1.5]}
         gl={{ antialias: false }}
-        camera={{ position: [0, 0, 15], fov: 17.5, near: 1, far: 20 }}
+        camera={{ position: [0, 0, 24], fov: 17.5, near: 1, far: 40 }}
       >
         <color attach="background" args={['#0b0c16']} />
         <ambientLight intensity={0.4} />
         <spotLight position={[10, 10, 10]} angle={0.15} penumbra={1} intensity={1.5} castShadow />
+        
+        {/* Enable mouse wheel zoom */}
+        <OrbitControls enableRotate={false} enablePan={false} minDistance={10} maxDistance={40} />
         
         <Physics gravity={[0, gravityEnabled ? -9.81 : 0, 0]}>
           <Pointer />

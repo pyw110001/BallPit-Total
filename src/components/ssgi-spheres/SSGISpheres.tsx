@@ -1,7 +1,7 @@
 import * as THREE from 'three'
 import { useRef, useReducer, useMemo } from 'react'
 import { Canvas, useFrame } from '@react-three/fiber'
-import { Environment, Lightformer } from '@react-three/drei'
+import { Environment, Lightformer, OrbitControls } from '@react-three/drei'
 import { BallCollider, Physics, RigidBody } from '@react-three/rapier'
 import { easing } from 'maath'
 import { Effects } from './Effects'
@@ -87,8 +87,11 @@ export default function SSGISpheres({
         onClick={cycleAccent}
         dpr={[1, 1.5]}
         gl={{ antialias: false }}
-        camera={{ position: [0, 0, 30], fov: 17.5, near: 10, far: 40 }}
+        camera={{ position: [0, 0, 30], fov: 17.5, near: 10, far: 50 }}
       >
+        
+        {/* Enable mouse wheel zoom */}
+        <OrbitControls enableRotate={false} enablePan={false} minDistance={15} maxDistance={50} />
         <color attach="background" args={['#0b0c16']} />
         
         <Physics timeStep="vary" gravity={[0, gravityEnabled ? -9.81 : 0, 0]}>

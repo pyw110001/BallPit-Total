@@ -1,7 +1,7 @@
 import { useRef, useMemo, useState, useReducer } from 'react'
 import * as THREE from 'three'
 import { Canvas, useFrame } from '@react-three/fiber'
-import { Environment, useTexture } from '@react-three/drei'
+import { Environment, useTexture, OrbitControls } from '@react-three/drei'
 import { Physics, RigidBody, BallCollider } from '@react-three/rapier'
 import { EffectComposer, N8AO, SMAA } from '@react-three/postprocessing'
 import { Outlines } from './Outlines'
@@ -88,7 +88,7 @@ export default function ObjectClump({
         shadows
         gl={{ antialias: false }}
         dpr={[1, 1.5]}
-        camera={{ position: [0, 0, 15], fov: 17.5, near: 1, far: 20 }}
+        camera={{ position: [0, 0, 24], fov: 17.5, near: 1, far: 40 }}
       >
         <ambientLight intensity={0.5} />
         <color attach="background" args={["#e5e7eb"]} />
@@ -100,6 +100,9 @@ export default function ObjectClump({
           castShadow
           shadow-mapSize={[512, 512]}
         />
+        
+        {/* Enable mouse wheel zoom */}
+        <OrbitControls enableRotate={false} enablePan={false} minDistance={10} maxDistance={40} />
         
         {/* Render ClumpScene inside Canvas context so useTexture hook resolves correctly */}
         <ClumpScene
