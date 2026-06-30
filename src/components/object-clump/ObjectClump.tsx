@@ -60,6 +60,7 @@ export default function ObjectClump({
   isUIVisible?: boolean
   lang?: 'zh' | 'en'
 }) {
+  const [mouseActive, setMouseActive] = useState(false)
   const [accent, cycleAccent] = useReducer((state: number) => ++state % colorThemes.length, 0)
   const [outlineIndex, setOutlineIndex] = useState(2) // Default to "Medium" outline
 
@@ -72,7 +73,14 @@ export default function ObjectClump({
   }, [accent])
 
   return (
-    <div className="demo-canvas-container">
+    <div 
+      className="demo-canvas-container"
+      onPointerEnter={() => setMouseActive(true)}
+      onPointerLeave={() => setMouseActive(false)}
+      onPointerMove={() => {
+        if (!mouseActive) setMouseActive(true)
+      }}
+    >
       <Canvas
         onClick={cycleAccent}
         shadows
@@ -93,7 +101,7 @@ export default function ObjectClump({
         
         {/* Setup Rapier Physics with upward gravity when enabled to match original cannon behavior */}
         <Physics gravity={[0, gravityEnabled ? 2.0 : 0.0, 0]}>
-          <Pointer />
+          <Pointer active={mouseActive} />
           <Clump
             material={baubleMaterial}
             outlinesThickness={outlineThicknesses[outlineIndex]}
@@ -219,20 +227,25 @@ function Clump({
   )
 }
 
-function Pointer() {
+function Pointer({ active }: { active: boolean }) {
   const viewport = useThree((state) => state.viewport)
   const pointerRef = useRef<RapierRigidBody>(null)
   
   useFrame((state) => {
     if (pointerRef.current) {
-      const x = (state.mouse.x * viewport.width) / 2
-      const y = (state.mouse.y * viewport.height) / 2
-      pointerRef.current.setNextKinematicTranslation({ x, y, z: 0 })
+      if (active) {
+        const x = (state.mouse.x * viewport.width) / 2
+        const y = (state.mouse.y * viewport.height) / 2
+        pointerRef.current.setNextKinematicTranslation({ x, y, z: 0 })
+      } else {
+        // Place pointer far away out of bounds so it doesn't affect spheres
+        pointerRef.current.setNextKinematicTranslation({ x: 0, y: 0, z: -100 })
+      }
     }
   })
 
   return (
-    <RigidBody ref={pointerRef} type="kinematicPosition" colliders={false}>
+    <RigidBody ref={pointerRef} type="kinematicPosition" colliders={false} position={[0, 0, -100]}>
       <BallCollider args={[3]} />
     </RigidBody>
   )
