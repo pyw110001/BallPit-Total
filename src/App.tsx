@@ -75,9 +75,9 @@ export default function App() {
   const [gestureActive, setGestureActive] = useState<boolean>(false)
   const [gestureStatus, setGestureStatus] = useState<string>('')
 
-  // Control body cursor class when gesture is active
+  // Control body cursor class when gesture is active and user is in an effect simulation
   useEffect(() => {
-    if (gestureActive) {
+    if (gestureActive && currentView !== 'portal') {
       document.body.classList.add('gesture-cursor-active')
     } else {
       document.body.classList.remove('gesture-cursor-active')
@@ -85,7 +85,7 @@ export default function App() {
     return () => {
       document.body.classList.remove('gesture-cursor-active')
     }
-  }, [gestureActive])
+  }, [gestureActive, currentView])
 
   const handleBack = () => {
     setCurrentView('portal')
@@ -439,6 +439,7 @@ export default function App() {
       {/* Global MediaPipe Gesture Controller */}
       <GestureController 
         active={gestureActive} 
+        enableInteraction={currentView !== 'portal'}
         onStatusChange={setGestureStatus} 
         lang={lang} 
       />

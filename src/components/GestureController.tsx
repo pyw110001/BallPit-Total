@@ -2,12 +2,14 @@ import { useEffect, useRef, useState } from 'react'
 
 interface GestureControllerProps {
   active: boolean
+  enableInteraction?: boolean
   onStatusChange?: (status: string) => void
   lang?: 'zh' | 'en'
 }
 
 export default function GestureController({
   active,
+  enableInteraction = true,
   onStatusChange,
   lang = 'zh'
 }: GestureControllerProps) {
@@ -19,6 +21,8 @@ export default function GestureController({
   
   const poseRef = useRef<any>(null)
   const cameraRef = useRef<any>(null)
+  const activeRef = useRef(active)
+  const enableInteractionRef = useRef(enableInteraction)
   
   // Tracking cursor coords (smoothed via LERP)
   const cursorRef = useRef({ x: window.innerWidth / 2, y: window.innerHeight / 2 })
@@ -48,6 +52,16 @@ export default function GestureController({
       disabled: 'Gesture control disabled'
     }
   }
+
+  // Sync activeRef value on every render to bypass stale closure bugs in callbacks
+  useEffect(() => {
+    activeRef.current = active
+  }, [active])
+
+  // Sync enableInteractionRef value on every render to bypass stale closures
+  useEffect(() => {
+    enableInteractionRef.current = enableInteraction
+  }, [enableInteraction])
 
   // Sync status updates when statusKey or lang changes
   useEffect(() => {
@@ -163,7 +177,7 @@ export default function GestureController({
       // Initialize camera directly using MediaPipe's Camera helper
       cameraRef.current = new CameraClass(videoElement, {
         onFrame: async () => {
-          if (poseRef.current && active) {
+          if (poseRef.current && activeRef.current) {
             try {
               await poseRef.current.send({ image: videoElement })
             } catch (err: any) {
@@ -223,7 +237,7 @@ export default function GestureController({
   }
 
   const onPoseResults = (results: any) => {
-    if (!active) return
+    if (!activeRef.current) return
 
     // Fetch canvas directly by ID dynamically to prevent react ref timing delay bugs
     const canvas = document.getElementById('camera-canvas') as HTMLCanvasElement
@@ -254,122 +268,126 @@ export default function GestureController({
     // Landmarks array
     const landmarks = results.poseLandmarks
 
-    // 2. Render skeleton overlays on normal coordinates using manual flipped mapping (1.0 - x)
+    // 2. Render skeleton overlays and dispatch coordinates only if landmarks detected
     if (landmarks) {
-      const rightWrist = landmarks[16]
-      if (rightWrist && rightWrist.visibility > 0.5) {
-        // Mirrored coordinates mapping
-        const targetX = (1 - rightWrist.x) * window.innerWidth
-        const targetY = rightWrist.y * window.innerHeight
+      // Only process cursor motion, clicks, and scrolling if interaction is enabled (e.g. inside an effect demo)
+      if (enableInteractionRef.current) {
+        // Track RIGHT_WRIST (16) for cursor positioning
+        const rightWrist = landmarks[16]
+        if (rightWrist && rightWrist.visibility > 0.5) {
+          // Mirrored coordinates mapping
+          const targetX = (1 - rightWrist.x) * window.innerWidth
+          const targetY = rightWrist.y * window.innerHeight
 
-        // Smooth cursor (LERP)
-        cursorRef.current.x += (targetX - cursorRef.current.x) * 0.22
-        cursorRef.current.y += (targetY - cursorRef.current.y) * 0.22
+          // Smooth cursor (LERP)
+          cursorRef.current.x += (targetX - cursorRef.current.x) * 0.22
+          cursorRef.current.y += (targetY - cursorRef.current.y) * 0.22
 
-        const cx = cursorRef.current.x
-        const cy = cursorRef.current.y
+          const cx = cursorRef.current.x
+          const cy = cursorRef.current.y
 
-        // Update cursor DOM element position
-        if (virtualCursorDom.current) {
-          virtualCursorDom.current.style.left = `${cx}px`
-          virtualCursorDom.current.style.top = `${cy}px`
-        }
-
-        // Dispatch MouseMove and PointerMove events at the target element
-        const targetElement = document.elementFromPoint(cx, cy)
-        if (targetElement) {
-          targetElement.dispatchEvent(
-            new MouseEvent('mousemove', {
-              clientX: cx,
-              clientY: cy,
-              bubbles: true,
-              cancelable: true
-            })
-          )
-          targetElement.dispatchEvent(
-            new PointerEvent('pointermove', {
-              clientX: cx,
-              clientY: cy,
-              bubbles: true,
-              cancelable: true
-            })
-          )
-        }
-
-        // 3. Track right index (19) and right thumb (21) for click pinch gesture
-        const rightIndex = landmarks[19]
-        const rightThumb = landmarks[21]
-
-        if (rightIndex && rightThumb && rightIndex.visibility > 0.4 && rightThumb.visibility > 0.4) {
-          const dx = rightIndex.x - rightThumb.x
-          const dy = rightIndex.y - rightThumb.y
-          const dist = Math.sqrt(dx * dx + dy * dy)
-
-          // Hysteresis click threshold
-          if (dist < 0.035) {
-            if (!isPinchedRef.current) {
-              isPinchedRef.current = true
-              triggerClick(cx, cy)
-              if (virtualCursorDom.current) {
-                virtualCursorDom.current.classList.add('pinched')
-              }
-            }
-          } else if (dist > 0.055) {
-            if (isPinchedRef.current) {
-              isPinchedRef.current = false
-              if (virtualCursorDom.current) {
-                virtualCursorDom.current.classList.remove('pinched')
-              }
-            }
+          // Update cursor DOM element position
+          if (virtualCursorDom.current) {
+            virtualCursorDom.current.style.left = `${cx}px`
+            virtualCursorDom.current.style.top = `${cy}px`
           }
 
-          // Draw indicator line on camera preview (mirror coordinates manually: 1.0 - x)
-          ctx.strokeStyle = isPinchedRef.current ? 'rgba(255, 64, 96, 0.8)' : 'rgba(32, 255, 160, 0.8)'
-          ctx.lineWidth = 3
-          ctx.beginPath()
-          ctx.moveTo((1.0 - rightIndex.x) * width, rightIndex.y * height)
-          ctx.lineTo((1.0 - rightThumb.x) * width, rightThumb.y * height)
-          ctx.stroke()
-        }
-      }
+          // Dispatch MouseMove and PointerMove events at the target element
+          const targetElement = document.elementFromPoint(cx, cy)
+          if (targetElement) {
+            targetElement.dispatchEvent(
+              new MouseEvent('mousemove', {
+                clientX: cx,
+                clientY: cy,
+                bubbles: true,
+                cancelable: true
+              })
+            )
+            targetElement.dispatchEvent(
+              new PointerEvent('pointermove', {
+                clientX: cx,
+                clientY: cy,
+                bubbles: true,
+                cancelable: true
+              })
+            )
+          }
 
-      // 4. Track LEFT_WRIST (15) for scroll wheel mapping
-      const leftWrist = landmarks[15]
-      if (leftWrist && leftWrist.visibility > 0.5) {
-        if (lastLeftWristY.current !== null) {
-          const deltaY = leftWrist.y - lastLeftWristY.current
-          
-          // Hysteresis vertical motion detection
-          if (Math.abs(deltaY) > 0.015) {
-            leftWristActiveCount.current++
+          // Track RIGHT_INDEX (20) and RIGHT_THUMB (22) for right hand click pinch gesture (Exact Match to user request)
+          const rightIndex = landmarks[20]
+          const rightThumb = landmarks[22]
+
+          if (rightIndex && rightThumb && rightIndex.visibility > 0.25 && rightThumb.visibility > 0.25) {
+            const dx = rightIndex.x - rightThumb.x
+            const dy = rightIndex.y - rightThumb.y
+            const dist = Math.sqrt(dx * dx + dy * dy)
+
+            // Pinch-click distance thresholds
+            if (dist < 0.04) { // Pinch
+              if (!isPinchedRef.current) {
+                isPinchedRef.current = true
+                triggerClick(cx, cy)
+                if (virtualCursorDom.current) {
+                  virtualCursorDom.current.classList.add('pinched')
+                }
+              }
+            } else if (dist > 0.06) { // Release
+              if (isPinchedRef.current) {
+                isPinchedRef.current = false
+                if (virtualCursorDom.current) {
+                  virtualCursorDom.current.classList.remove('pinched')
+                }
+              }
+            }
+
+            // Draw right hand pinch indicator line on camera preview (mirror coordinates manually: 1.0 - x)
+            ctx.strokeStyle = isPinchedRef.current ? 'rgba(255, 64, 96, 0.8)' : 'rgba(32, 255, 160, 0.8)'
+            ctx.lineWidth = 3
+            ctx.beginPath()
+            ctx.moveTo((1.0 - rightIndex.x) * width, rightIndex.y * height)
+            ctx.lineTo((1.0 - rightThumb.x) * width, rightThumb.y * height)
+            ctx.stroke()
+          }
+        }
+
+        // Track LEFT_WRIST (15) for scroll wheel mapping
+        const leftWrist = landmarks[15]
+        if (leftWrist && leftWrist.visibility > 0.5) {
+          if (lastLeftWristY.current !== null) {
+            const deltaY = leftWrist.y - lastLeftWristY.current
             
-            if (leftWristActiveCount.current > 1) { // Debounce slightly
-              const cx = cursorRef.current.x
-              const cy = cursorRef.current.y
-              const targetElement = document.elementFromPoint(cx, cy)
+            // Hysteresis vertical motion detection
+            if (Math.abs(deltaY) > 0.015) {
+              leftWristActiveCount.current++
               
-              if (targetElement) {
-                // Dispatch wheel scroll event (scale deltaY for zoom effect)
-                targetElement.dispatchEvent(
-                  new WheelEvent('wheel', {
-                    deltaY: deltaY * 2500,
-                    bubbles: true,
-                    cancelable: true
-                  })
-                )
+              if (leftWristActiveCount.current > 1) { // Debounce slightly
+                const cx = cursorRef.current.x
+                const cy = cursorRef.current.y
+                const targetElement = document.elementFromPoint(cx, cy)
+                
+                if (targetElement) {
+                  // Dispatch wheel scroll event (scale deltaY for zoom effect)
+                  targetElement.dispatchEvent(
+                    new WheelEvent('wheel', {
+                      deltaY: deltaY * 2500,
+                      bubbles: true,
+                      cancelable: true
+                    })
+                  )
+                }
               }
+            } else {
+              leftWristActiveCount.current = 0
             }
-          } else {
-            leftWristActiveCount.current = 0
           }
+          lastLeftWristY.current = leftWrist.y
+        } else {
+          lastLeftWristY.current = null
+          leftWristActiveCount.current = 0
         }
-        lastLeftWristY.current = leftWrist.y
-      } else {
-        lastLeftWristY.current = null
-        leftWristActiveCount.current = 0
       }
 
-      // 5. Draw skeletal indicators in the preview window (mirrored coordinates manually: 1.0 - x)
+      // Draw skeletal indicators in the preview window (always draw skeleton to let user see status)
       drawSkeleton(ctx, landmarks, width, height)
     }
   }
@@ -428,11 +446,10 @@ export default function GestureController({
     drawLine(landmarks[11], landmarks[13], 'rgba(168, 85, 247, 0.5)')
     drawLine(landmarks[13], landmarks[15], 'rgba(168, 85, 247, 0.8)', 3)
 
-    // Hand components
-    // Right wrist & finger tips
+    // Hand components (Corrected to track RIGHT hand index 20 & right thumb 22)
     drawPoint(landmarks[16], '#3b82f6', 6)  // Right Wrist (Blue)
-    drawPoint(landmarks[19], '#10b981', 5)  // Right Index (Green)
-    drawPoint(landmarks[21], '#f59e0b', 5)  // Right Thumb (Orange)
+    drawPoint(landmarks[20], '#10b981', 5)  // Right Index (Green)
+    drawPoint(landmarks[22], '#f59e0b', 5)  // Right Thumb (Orange)
 
     // Left wrist
     drawPoint(landmarks[15], '#a855f7', 6)  // Left Wrist (Purple)
@@ -440,62 +457,56 @@ export default function GestureController({
 
   return (
     <>
-      {/* Hidden capturing video stream styled to ensure browser always processes frames */}
-      <video
-        id="webcam"
-        width={320}
-        height={240}
-        style={{ position: 'fixed', width: '320px', height: '240px', opacity: 0.001, pointerEvents: 'none', top: '-1000px', left: '-1000px' }}
-        autoPlay
-        playsInline
-        muted
-      />
-
       {/* Floating webcam skeletal preview canvas */}
-      {active && (
-        <div className="gesture-camera-preview animate-fade-in" style={{ position: 'fixed' }}>
-          {/* Debug Overlay Panel */}
-          <div style={{
-            position: 'absolute',
-            top: '8px',
-            left: '8px',
-            right: '8px',
-            background: 'rgba(0, 0, 0, 0.8)',
-            color: '#10b981',
-            fontSize: '9px',
-            fontFamily: 'monospace',
-            padding: '6px 10px',
-            borderRadius: '6px',
-            pointerEvents: 'none',
-            wordBreak: 'break-all',
-            border: '1px solid rgba(255, 255, 255, 0.1)',
-            zIndex: 20
-          }}>
-            {debugInfo}
-          </div>
-          <canvas
-            id="camera-canvas"
-            width={200}
-            height={150}
-            style={{ display: 'block', width: '100%', height: '100%' }}
-          />
-          <div className="preview-indicator">
-            <span className="pulse-dot"></span>
-            <span>LIVE GESTURE {frameCount > 0 ? `(${frameCount})` : '(CONNECTING)'}</span>
-          </div>
+      <div 
+        className="gesture-camera-preview animate-fade-in" 
+        style={{ 
+          position: 'fixed',
+          display: active ? 'flex' : 'none'
+        }}
+      >
+        {/* Debug Overlay Panel */}
+        <div style={{
+          position: 'absolute',
+          top: '8px',
+          left: '8px',
+          right: '8px',
+          background: 'rgba(0, 0, 0, 0.8)',
+          color: '#10b981',
+          fontSize: '9px',
+          fontFamily: 'monospace',
+          padding: '6px 10px',
+          borderRadius: '6px',
+          pointerEvents: 'none',
+          wordBreak: 'break-all',
+          border: '1px solid rgba(255, 255, 255, 0.1)',
+          zIndex: 20
+        }}>
+          {debugInfo}
         </div>
-      )}
+        <canvas
+          id="camera-canvas"
+          width={200}
+          height={150}
+          style={{ display: 'block', width: '100%', height: '100%' }}
+        />
+        <div className="preview-indicator">
+          <span className="pulse-dot"></span>
+          <span>LIVE GESTURE {frameCount > 0 ? `(${frameCount})` : '(CONNECTING)'}</span>
+        </div>
+      </div>
 
       {/* Custom Virtual Hand Cursor */}
-      {active && (
-        <div
-          ref={virtualCursorDom}
-          className="gesture-virtual-cursor"
-        >
-          <div className="cursor-ring"></div>
-          <div className="cursor-dot"></div>
-        </div>
-      )}
+      <div
+        ref={virtualCursorDom}
+        className="gesture-virtual-cursor"
+        style={{
+          display: (active && enableInteraction) ? 'block' : 'none'
+        }}
+      >
+        <div className="cursor-ring"></div>
+        <div className="cursor-dot"></div>
+      </div>
     </>
   )
 }

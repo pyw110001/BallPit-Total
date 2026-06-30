@@ -11,6 +11,8 @@
   </head>
   <body>
     <div id="root"></div>
+    <!-- Static webcam video container to prevent React lifecycle interference -->
+    <video id="webcam" autoplay playsinline muted style="display:none;"></video>
     <script type="module" src="/src/main.tsx"></script>
   </body>
 </html>
