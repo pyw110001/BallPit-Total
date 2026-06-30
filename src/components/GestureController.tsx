@@ -13,6 +13,7 @@ export default function GestureController({
 }: GestureControllerProps) {
   const [loaded, setLoaded] = useState(false)
   const [error, setError] = useState<string | null>(null)
+  const [statusKey, setStatusKey] = useState<'initializing' | 'ready' | 'error' | 'disabled'>('initializing')
   
   const videoRef = useRef<HTMLVideoElement | null>(null)
   const canvasRef = useRef<HTMLCanvasElement | null>(null)
@@ -47,17 +48,59 @@ export default function GestureController({
     }
   }
 
-  // Helper to load CDN scripts
-  const loadScript = (src: string): Promise<void> => {
+  // Sync status updates when statusKey or lang changes
+  useEffect(() => {
+    onStatusChange?.(labels[lang][statusKey])
+  }, [statusKey, lang])
+
+  // Helper to load CDN scripts and check for global object definition (handles strict mode double mount)
+  const loadScript = (src: string, globalName: string): Promise<void> => {
     return new Promise((resolve, reject) => {
-      if (document.querySelector(`script[src="${src}"]`)) {
+      if ((window as any)[globalName]) {
         resolve()
         return
       }
+      
+      const existingScript = document.querySelector(`script[src="${src}"]`) as HTMLScriptElement
+      if (existingScript) {
+        // If script is already inserted, check if/when the global becomes available
+        const interval = setInterval(() => {
+          if ((window as any)[globalName]) {
+            clearInterval(interval)
+            resolve()
+          }
+        }, 50)
+        setTimeout(() => {
+          clearInterval(interval)
+          if ((window as any)[globalName]) {
+            resolve()
+          } else {
+            reject(new Error(`Timeout waiting for ${globalName}`))
+          }
+        }, 15000)
+        return
+      }
+      
       const script = document.createElement('script')
       script.src = src
       script.async = true
-      script.onload = () => resolve()
+      script.crossOrigin = 'anonymous'
+      script.onload = () => {
+        const interval = setInterval(() => {
+          if ((window as any)[globalName]) {
+            clearInterval(interval)
+            resolve()
+          }
+        }, 20)
+        setTimeout(() => {
+          clearInterval(interval)
+          if ((window as any)[globalName]) {
+            resolve()
+          } else {
+            reject(new Error(`Failed to initialize global ${globalName}`))
+          }
+        }, 5000)
+      }
       script.onerror = () => reject(new Error(`Failed to load script ${src}`))
       document.head.appendChild(script)
     })
@@ -65,13 +108,12 @@ export default function GestureController({
 
   useEffect(() => {
     let activeLocal = true
-
-    onStatusChange?.(labels[lang].initializing)
+    setStatusKey('initializing')
     
     // Load MediaPipe scripts dynamically
     Promise.all([
-      loadScript('https://cdn.jsdelivr.net/npm/@mediapipe/camera_utils/camera_utils.js'),
-      loadScript('https://cdn.jsdelivr.net/npm/@mediapipe/pose/pose.js')
+      loadScript('https://cdn.jsdelivr.net/npm/@mediapipe/camera_utils/camera_utils.js', 'Camera'),
+      loadScript('https://cdn.jsdelivr.net/npm/@mediapipe/pose/pose.js', 'Pose')
     ])
       .then(() => {
         if (!activeLocal) return
@@ -82,13 +124,13 @@ export default function GestureController({
         if (!activeLocal) return
         console.error(err)
         setError(err.message)
-        onStatusChange?.(labels[lang].error)
+        setStatusKey('error')
       })
 
     return () => {
       activeLocal = false
       stopCamera()
-    };
+    }
   }, [])
 
   // Restart camera when active state changes
@@ -96,10 +138,10 @@ export default function GestureController({
     if (loaded && poseRef.current) {
       if (active) {
         startCamera()
-        onStatusChange?.(labels[lang].ready)
+        setStatusKey('ready')
       } else {
         stopCamera()
-        onStatusChange?.(labels[lang].disabled)
+        setStatusKey('disabled')
         if (canvasRef.current) {
           const ctx = canvasRef.current.getContext('2d')
           ctx?.clearRect(0, 0, canvasRef.current.width, canvasRef.current.height)
@@ -152,14 +194,17 @@ export default function GestureController({
       })
       .catch((err) => {
         console.error('Webcam error:', err)
-        setError(labels[lang].error)
-        onStatusChange?.(labels[lang].error)
+        setError(err.message || 'Webcam error')
+        setStatusKey('error')
       })
   }
 
   const initializePose = () => {
     const PoseClass = (window as any).Pose
-    if (!PoseClass) return
+    if (!PoseClass) {
+      setStatusKey('error')
+      return
+    }
 
     const pose = new PoseClass({
       locateFile: (file: string) => `https://cdn.jsdelivr.net/npm/@mediapipe/pose/${file}`
@@ -177,7 +222,9 @@ export default function GestureController({
 
     if (active) {
       startCamera()
-      onStatusChange?.(labels[lang].ready)
+      setStatusKey('ready')
+    } else {
+      setStatusKey('disabled')
     }
   }
 
