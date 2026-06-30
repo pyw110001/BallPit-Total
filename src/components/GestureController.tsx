@@ -144,6 +144,13 @@ export default function GestureController({
       return
     }
 
+    // Force programmatically muting properties to bypass React's muted attribute bug and browser autoplay restrictions
+    videoElement.muted = true
+    videoElement.defaultMuted = true
+    videoElement.playsInline = true
+    videoElement.setAttribute('muted', '')
+    videoElement.setAttribute('playsinline', '')
+
     try {
       const CameraClass = (window as any).Camera
       if (!CameraClass) {
@@ -169,19 +176,8 @@ export default function GestureController({
       })
       
       setDebugInfo('Starting Camera...')
-      const startPromise = cameraRef.current.start()
-      if (startPromise && typeof startPromise.then === 'function') {
-        startPromise
-          .then(() => {
-            setDebugInfo('Camera start promise resolved!')
-          })
-          .catch((err: any) => {
-            setDebugInfo(`Camera start promise rejected: ${err.message}`)
-            setStatusKey('error')
-          })
-      } else {
-        setDebugInfo('Camera started (sync/no promise)')
-      }
+      await cameraRef.current.start()
+      setDebugInfo('Camera started successfully!')
     } catch (err: any) {
       console.error('Camera start failed:', err)
       setError(err.message || 'Webcam error')
