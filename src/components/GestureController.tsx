@@ -53,82 +53,37 @@ export default function GestureController({
     onStatusChange?.(labels[lang][statusKey])
   }, [statusKey, lang])
 
-  // Helper to load CDN scripts and check for global object definition (handles strict mode double mount)
-  const loadScript = (src: string, globalName: string): Promise<void> => {
-    return new Promise((resolve, reject) => {
-      if ((window as any)[globalName]) {
-        resolve()
-        return
-      }
-      
-      const existingScript = document.querySelector(`script[src="${src}"]`) as HTMLScriptElement
-      if (existingScript) {
-        // If script is already inserted, check if/when the global becomes available
-        const interval = setInterval(() => {
-          if ((window as any)[globalName]) {
-            clearInterval(interval)
-            resolve()
-          }
-        }, 50)
-        setTimeout(() => {
-          clearInterval(interval)
-          if ((window as any)[globalName]) {
-            resolve()
-          } else {
-            reject(new Error(`Timeout waiting for ${globalName}`))
-          }
-        }, 15000)
-        return
-      }
-      
-      const script = document.createElement('script')
-      script.src = src
-      script.async = true
-      script.crossOrigin = 'anonymous'
-      script.onload = () => {
-        const interval = setInterval(() => {
-          if ((window as any)[globalName]) {
-            clearInterval(interval)
-            resolve()
-          }
-        }, 20)
-        setTimeout(() => {
-          clearInterval(interval)
-          if ((window as any)[globalName]) {
-            resolve()
-          } else {
-            reject(new Error(`Failed to initialize global ${globalName}`))
-          }
-        }, 5000)
-      }
-      script.onerror = () => reject(new Error(`Failed to load script ${src}`))
-      document.head.appendChild(script)
-    })
-  }
-
   useEffect(() => {
     let activeLocal = true
     setStatusKey('initializing')
-    
-    // Load MediaPipe scripts dynamically
-    Promise.all([
-      loadScript('https://cdn.jsdelivr.net/npm/@mediapipe/camera_utils/camera_utils.js', 'Camera'),
-      loadScript('https://cdn.jsdelivr.net/npm/@mediapipe/pose/pose.js', 'Pose')
-    ])
-      .then(() => {
-        if (!activeLocal) return
-        setLoaded(true)
-        initializePose()
-      })
-      .catch((err) => {
-        if (!activeLocal) return
-        console.error(err)
-        setError(err.message)
+
+    // Polling to wait for MediaPipe scripts (loaded statically in index.html) to be defined on window
+    const checkInterval = setInterval(() => {
+      const PoseClass = (window as any).Pose
+      const CameraClass = (window as any).Camera
+      
+      if (PoseClass && CameraClass) {
+        clearInterval(checkInterval)
+        if (activeLocal) {
+          setLoaded(true)
+          initializePose()
+        }
+      }
+    }, 100)
+
+    // Timeout check after 15 seconds if scripts fail to load
+    const timeout = setTimeout(() => {
+      clearInterval(checkInterval)
+      if (activeLocal && (!window.hasOwnProperty('Pose') || !window.hasOwnProperty('Camera'))) {
+        setError('MediaPipe loading timeout')
         setStatusKey('error')
-      })
+      }
+    }, 15000)
 
     return () => {
       activeLocal = false
+      clearInterval(checkInterval)
+      clearTimeout(timeout)
       stopCamera()
     }
   }, [])
@@ -166,37 +121,35 @@ export default function GestureController({
     }
   }
 
-  const startCamera = () => {
+  const startCamera = async () => {
     if (cameraRef.current) return
 
     const videoElement = videoRef.current
     if (!videoElement) return
 
-    navigator.mediaDevices
-      .getUserMedia({ video: { width: 320, height: 240, frameRate: { ideal: 30 } } })
-      .then((stream) => {
-        videoElement.srcObject = stream
-        videoElement.play().then(() => {
-          const CameraClass = (window as any).Camera
-          if (!CameraClass) return
-
-          cameraRef.current = new CameraClass(videoElement, {
-            onFrame: async () => {
-              if (poseRef.current && active) {
-                await poseRef.current.send({ image: videoElement })
-              }
-            },
-            width: 320,
-            height: 240
-          })
-          cameraRef.current.start()
-        })
-      })
-      .catch((err) => {
-        console.error('Webcam error:', err)
-        setError(err.message || 'Webcam error')
+    try {
+      const CameraClass = (window as any).Camera
+      if (!CameraClass) {
         setStatusKey('error')
+        return
+      }
+
+      // Initialize camera directly using MediaPipe's Camera helper (exact match to Particels1)
+      cameraRef.current = new CameraClass(videoElement, {
+        onFrame: async () => {
+          if (poseRef.current && active) {
+            await poseRef.current.send({ image: videoElement })
+          }
+        },
+        width: 320,
+        height: 240
       })
+      await cameraRef.current.start()
+    } catch (err: any) {
+      console.error('Camera start failed:', err)
+      setError(err.message || 'Webcam error')
+      setStatusKey('error')
+    }
   }
 
   const initializePose = () => {
@@ -237,19 +190,19 @@ export default function GestureController({
 
     const { width, height } = canvas
 
-    // 1. Draw mirrored webcam image (always show video to user)
+    // 1. Mirror draw camera feed only (exact match to Particels1)
     ctx.save()
     ctx.clearRect(0, 0, width, height)
     ctx.translate(width, 0)
     ctx.scale(-1, 1)
     ctx.drawImage(results.image, 0, 0, width, height)
+    ctx.restore() // Restore context immediately, drawing skeleton overlay on standard coordinates
 
     // Landmarks array
     const landmarks = results.poseLandmarks
 
-    // Draw skeletal graphics and perform event dispatching only if landmarks are successfully detected
+    // 2. Render skeleton overlays on normal coordinates using manual flipped mapping (1.0 - x)
     if (landmarks) {
-      // 2. Track RIGHT_WRIST (16) for cursor positioning
       const rightWrist = landmarks[16]
       if (rightWrist && rightWrist.visibility > 0.5) {
         // Mirrored coordinates mapping
@@ -317,12 +270,12 @@ export default function GestureController({
             }
           }
 
-          // Draw indicator line on camera preview
+          // Draw indicator line on camera preview (mirror coordinates manually: 1.0 - x)
           ctx.strokeStyle = isPinchedRef.current ? 'rgba(255, 64, 96, 0.8)' : 'rgba(32, 255, 160, 0.8)'
           ctx.lineWidth = 3
           ctx.beginPath()
-          ctx.moveTo(rightIndex.x * width, rightIndex.y * height)
-          ctx.lineTo(rightThumb.x * width, rightThumb.y * height)
+          ctx.moveTo((1.0 - rightIndex.x) * width, rightIndex.y * height)
+          ctx.lineTo((1.0 - rightThumb.x) * width, rightThumb.y * height)
           ctx.stroke()
         }
       }
@@ -363,11 +316,9 @@ export default function GestureController({
         leftWristActiveCount.current = 0
       }
 
-      // 5. Draw skeletal indicators in the preview window (mirrored)
+      // 5. Draw skeletal indicators in the preview window (mirrored coordinates manually: 1.0 - x)
       drawSkeleton(ctx, landmarks, width, height)
     }
-
-    ctx.restore()
   }
 
   const triggerClick = (cx: number, cy: number) => {
@@ -400,7 +351,7 @@ export default function GestureController({
       if (!landmark || landmark.visibility < 0.5) return
       ctx.fillStyle = color
       ctx.beginPath()
-      ctx.arc(landmark.x * w, landmark.y * h, radius, 0, 2 * Math.PI)
+      ctx.arc((1.0 - landmark.x) * w, landmark.y * h, radius, 0, 2 * Math.PI)
       ctx.fill()
     }
 
@@ -409,8 +360,8 @@ export default function GestureController({
       ctx.strokeStyle = color
       ctx.lineWidth = width
       ctx.beginPath()
-      ctx.moveTo(ptA.x * w, ptA.y * h)
-      ctx.lineTo(ptB.x * w, ptB.y * h)
+      ctx.moveTo((1.0 - ptA.x) * w, ptA.y * h)
+      ctx.lineTo((1.0 - ptB.x) * w, ptB.y * h)
       ctx.stroke()
     }
 
