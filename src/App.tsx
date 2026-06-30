@@ -3,9 +3,10 @@ import LusionConnectors from './components/lusion-connectors/LusionConnectors'
 import SSGISpheres from './components/ssgi-spheres/SSGISpheres'
 import GradientText from './components/GradientText'
 import BorderGlow from './components/BorderGlow'
+import ObjectClump from './components/object-clump/ObjectClump'
 import { Sparkles, Activity, Layers, ArrowRight, Sun, Box, Globe, Moon, Languages } from 'lucide-react'
 
-type ViewType = 'portal' | 'lusion' | 'ssgi'
+type ViewType = 'portal' | 'lusion' | 'ssgi' | 'clump'
 
 const portalTranslations = {
   en: {
@@ -25,6 +26,9 @@ const portalTranslations = {
     
     ssgiTitle: "SSGI Spheres",
     ssgiDesc: "A high-fidelity physical sphere pit featuring Screen-Space Global Illumination (SSGI). Showcases diffuse light bouncing, emissive ring reflections, and rich depth shader reflections.",
+
+    clumpTitle: "Object Clump",
+    clumpDesc: "A physics-driven cluster of glossy spheres styled with interactive outlines. Move your cursor to disperse the clump, click to switch color theme.",
     
     backBtn: "Back",
     gravityOn: "Gravity ON",
@@ -47,7 +51,10 @@ const portalTranslations = {
     lusionDesc: "具有鼠标引力运动学和刚体物理的互锁 3D 连接体模型。使用 N8AO（环境光遮蔽）来实现油润的反射和逼真深度阴影。",
     
     ssgiTitle: "SSGI 物理球",
-    ssgiDesc: "一个具有屏幕空间全局光照 (SSGI) 的高保真物理球体坑。展示了漫反射光线弹跳、发光环反射以及丰富的深度着色器反射。",
+    ssgiDesc: "一个具有屏幕空间全局光照 (SSGI) 的高保真物理球体坑。展示了漫自动光线弹跳、发光环反射以及丰富的深度着色器反射。",
+
+    clumpTitle: "物体物理簇",
+    clumpDesc: "一个由物理引擎驱动的亮面球体簇，配有交互式卡通描边。移动光标可打散粒子群，点击画布以改变色彩主题。",
     
     backBtn: "返回",
     gravityOn: "重力开启",
@@ -216,6 +223,48 @@ export default function App() {
               </div>
             </BorderGlow>
 
+            {/* Card 3: Object Clump */}
+            <BorderGlow
+              className="demo-card card-clump"
+              onClick={() => setCurrentView('clump')}
+              backgroundColor={darkMode ? "rgba(18, 20, 38, 0.55)" : "rgba(255, 255, 255, 0.75)"}
+              borderRadius={24}
+              glowColor="270 85 75"
+              colors={['#c084fc', '#f472b6', '#38bdf8']}
+              glowRadius={40}
+              edgeSensitivity={30}
+              glowIntensity={1.2}
+            >
+              <div className="card-media">
+                <img src="/thumbnails/object-clump.png" className="gradient-background" alt="Object Clump" />
+                <div className="mesh-overlay"></div>
+                <div className="card-floating-badge">N8AO + Outlines</div>
+              </div>
+
+              <div className="card-content">
+                <div className="card-header-row">
+                  <h2 className="card-title">{portalTranslations[lang].clumpTitle}</h2>
+                  <Box className="card-icon" size={20} />
+                </div>
+
+                <p className="card-description">
+                  {portalTranslations[lang].clumpDesc}
+                </p>
+
+                <div className="tech-stack-row">
+                  <span className="tech-tag">Rapier Physics</span>
+                  <span className="tech-tag">Drei Outlines</span>
+                  <span className="tech-tag">N8AO Ambient Occlusion</span>
+                  <span className="tech-tag">HDR Environment</span>
+                </div>
+
+                <div className="card-footer">
+                  <span className="play-label">{portalTranslations[lang].launchSim}</span>
+                  <ArrowRight size={16} className="arrow-icon" />
+                </div>
+              </div>
+            </BorderGlow>
+
           </main>
 
           {/* Footer Info */}
@@ -279,6 +328,38 @@ export default function App() {
                 <span>{portalTranslations[lang].backBtn}</span>
               </button>
               <div className="hud-title-node">{portalTranslations[lang].ssgiTitle}</div>
+              <button 
+                className={`hud-gravity-btn ${gravityEnabled ? 'active' : ''}`}
+                onClick={() => setGravityEnabled(!gravityEnabled)}
+              >
+                <Globe size={14} />
+                <span>{gravityEnabled ? portalTranslations[lang].gravityOn : portalTranslations[lang].zeroG}</span>
+              </button>
+            </div>
+          ) : (
+            <div className="immersive-hint">
+              {portalTranslations[lang].immersiveHint}
+            </div>
+          )}
+        </div>
+      )}
+
+      {currentView === 'clump' && (
+        <div 
+          className="canvas-wrapper animate-fade-in"
+          onDoubleClick={() => setIsUIVisible(!isUIVisible)}
+          style={{ cursor: isUIVisible ? 'default' : 'none' }}
+        >
+          <ObjectClump onBack={handleBack} gravityEnabled={gravityEnabled} isUIVisible={isUIVisible} lang={lang} />
+
+          {/* Quick HUD controls overlay */}
+          {isUIVisible ? (
+            <div className="top-hud-bar">
+              <button className="hud-back-btn" onClick={handleBack}>
+                <ArrowRight style={{ transform: 'rotate(180deg)' }} size={16} />
+                <span>{portalTranslations[lang].backBtn}</span>
+              </button>
+              <div className="hud-title-node">{portalTranslations[lang].clumpTitle}</div>
               <button 
                 className={`hud-gravity-btn ${gravityEnabled ? 'active' : ''}`}
                 onClick={() => setGravityEnabled(!gravityEnabled)}
