@@ -180,28 +180,27 @@ function Clump({
     for (let i = 0; i < count; i++) {
       arr.push({
         key: i,
-        position: [rfs(10), rfs(10), rfs(10)] as [number, number, number],
+        position: [rfs(20), rfs(20), rfs(20)] as [number, number, number],
         rotation: [0, 0, 0] as [number, number, number]
       })
     }
     return arr
   }, [])
 
-  // Apply continuous force towards the center (0,0,0) to clump them
+  // Apply continuous spring force towards the center (0,0,0) to clump them gently
   useFrame(() => {
     if (!apiRef.current) return
     apiRef.current.forEach((api) => {
       if (!api) return
       const pos = api.translation()
-      const dist = Math.sqrt(pos.x * pos.x + pos.y * pos.y + pos.z * pos.z)
-      if (dist > 0.001) {
-        // Pull force towards origin
-        const forceMultiplier = -20
-        const fx = (pos.x / dist) * forceMultiplier
-        const fy = (pos.y / dist) * forceMultiplier
-        const fz = (pos.z / dist) * forceMultiplier
-        api.addForce({ x: fx, y: fy, z: fz }, true)
-      }
+      // Spring force F = -k * x ensures force decreases to 0 at the origin,
+      // avoiding massive overlapping collisions and explosion oscillations.
+      const k = 15.0
+      api.addForce({
+        x: -pos.x * k,
+        y: -pos.y * k,
+        z: -pos.z * k
+      }, true)
     })
   })
 
